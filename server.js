@@ -411,7 +411,36 @@ mcpServer.tool("pf_upload_media", "Get presigned URL to upload local media", { f
   return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
 });
 
-// MCP endpoint
+// ─── SSE Transport for Claude.ai connector ───────────────────────────────────
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+
+const sseTransports = new Map();
+
+// SSE endpoint — Claude.ai connects here
+app.get("/mcp", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const transport = new SSEServerTransport("/mcp/messages", res);
+  const sessId    = makeId("sse");
+  sseTransports.set(sessId, transport);
+
+  res.on("close", () => sseTransports.delete(sessId));
+
+  await mcpServer.connect(transport);
+});
+
+// SSE message handler
+app.post("/mcp/messages", async (req, res) => {
+  const sessId  = req.query.sessionId;
+  const transport = sessId ? sseTransports.get(sessId) : [...sseTransports.values()][0];
+  if (!transport) return res.status(404).json({ error: "No active SSE session" });
+  await transport.handlePostMessage(req, res);
+});
+
+// Streamable HTTP endpoint (for other clients)
 app.post("/mcp", async (req, res) => {
   try {
     const sessionId = req.headers["mcp-session-id"] || makeId("sess");
