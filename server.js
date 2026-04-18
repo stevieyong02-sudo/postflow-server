@@ -22,6 +22,7 @@ import session from "express-session";
 import crypto from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -307,130 +308,125 @@ setInterval(async () => {
   }
 }, 60_000);
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// POSTFLOW MCP SERVER (14 tools)
-// ═══════════════════════════════════════════════════════════════════════════════
-const mcpServer  = new McpServer({ name: "postflow-mcp", version: "1.0.0" });
+// ─── MCP Endpoints ────────────────────────────────────────────────────────────
 const transports = new Map();
 
-mcpServer.tool("pf_get_user", "Verify PostFlow connection and server status", {}, async () =>
-  ({ content: [{ type: "text", text: JSON.stringify({ server: "PostFlow v1.0.0", status: "ok", facebook: { configured: !!(FB_APP_ID && FB_APP_SECRET) }, totalAccounts: Object.values(connectedAccounts).flat().length }) }] }));
+// Create a fresh MCP server instance with all tools registered
+function createMcpServer() {
+  const srv = new McpServer({ name: "postflow-mcp", version: "1.0.0" });
 
-mcpServer.tool("pf_list_accounts", "List all connected social accounts", { platform: z.string().optional(), userId: z.string().optional() }, async ({ platform, userId }) => {
-  const all = Object.entries(connectedAccounts).flatMap(([uid, accs]) =>
-    accs.filter(a => (!platform || a.platform === platform) && (!userId || uid === userId))
-        .map(a => ({ ...a, token: undefined, userToken: undefined }))
-  );
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, count: all.length, accounts: all }) }] };
-});
+  srv.tool("pf_get_user", "Verify PostFlow connection and server status", {}, async () =>
+    ({ content: [{ type: "text", text: JSON.stringify({ server: "PostFlow v1.0.0", status: "ok", facebook: { configured: !!(FB_APP_ID && FB_APP_SECRET) }, totalAccounts: Object.values(connectedAccounts).flat().length }) }] }));
 
-mcpServer.tool("pf_create_post", "Publish or schedule a post via PostFlow API", {
-  accountId:     z.string(),
-  platform:      z.enum(["facebook","instagram","twitter","linkedin","tiktok","youtube","bluesky","threads","pinterest"]),
-  text:          z.string(),
-  mediaUrls:     z.array(z.string()).optional(),
-  scheduledTime: z.string().optional(),
-  useNextFreeSlot: z.boolean().optional(),
-  mediaType:     z.enum(["post","reel","story"]).optional(),
-  userId:        z.string().optional(),
-}, async ({ accountId, platform, text, mediaUrls = [], scheduledTime, useNextFreeSlot, mediaType = "post", userId }) => {
-  let schedAt = scheduledTime;
-  if (!schedAt && useNextFreeSlot) { const d = new Date(); d.setHours(d.getHours() + 3, 0, 0, 0); schedAt = d.toISOString(); }
-
-  // Find account across all users
-  const uid = userId || Object.keys(connectedAccounts).find(u => connectedAccounts[u].find(a => a.id === accountId));
-  const account = (connectedAccounts[uid] || []).find(a => a.id === accountId);
-
-  if (!account) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: `Account ${accountId} not found. Call pf_list_accounts first.` }) }] };
-
-  const r = await fetch(`${BASE_URL}/api/post`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountId, text, mediaUrls, mediaType, scheduledTime: schedAt, userId: uid }),
+  srv.tool("pf_list_accounts", "List all connected social accounts", { platform: z.string().optional(), userId: z.string().optional() }, async ({ platform, userId }) => {
+    const all = Object.entries(connectedAccounts).flatMap(([uid, accs]) =>
+      accs.filter(a => (!platform || a.platform === platform) && (!userId || uid === userId))
+          .map(a => ({ ...a, token: undefined, userToken: undefined }))
+    );
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, count: all.length, accounts: all }) }] };
   });
-  const data = await r.json();
-  return { content: [{ type: "text", text: JSON.stringify(data) }] };
-});
 
-mcpServer.tool("pf_get_post_status", "Check post publishing status", { postSubmissionId: z.string() }, async ({ postSubmissionId }) => {
-  const post = posts[postSubmissionId];
-  if (!post) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, ...post }) }] };
-});
+  srv.tool("pf_create_post", "Publish or schedule a post", {
+    accountId: z.string(), platform: z.enum(["facebook","instagram","twitter","linkedin","tiktok","youtube","bluesky","threads","pinterest"]),
+    text: z.string(), mediaUrls: z.array(z.string()).optional(), scheduledTime: z.string().optional(),
+    useNextFreeSlot: z.boolean().optional(), mediaType: z.enum(["post","reel","story"]).optional(), userId: z.string().optional(),
+  }, async ({ accountId, platform, text, mediaUrls = [], scheduledTime, useNextFreeSlot, mediaType = "post", userId }) => {
+    let schedAt = scheduledTime;
+    if (!schedAt && useNextFreeSlot) { const d = new Date(); d.setHours(d.getHours() + 3, 0, 0, 0); schedAt = d.toISOString(); }
+    const uid = userId || Object.keys(connectedAccounts).find(u => connectedAccounts[u].find(a => a.id === accountId));
+    const account = (connectedAccounts[uid] || []).find(a => a.id === accountId);
+    if (!account) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: `Account ${accountId} not found. Call pf_list_accounts first.` }) }] };
+    const r = await fetch(`${BASE_URL}/api/post`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accountId, text, mediaUrls, mediaType, scheduledTime: schedAt, userId: uid }) });
+    const data = await r.json();
+    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+  });
 
-mcpServer.tool("pf_list_schedules", "List upcoming scheduled posts", { userId: z.string().optional() }, async ({ userId }) => {
-  const pending = schedules.filter(s => s.status === "pending" && (!userId || s.userId === userId));
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, count: pending.length, schedules: pending }) }] };
-});
+  srv.tool("pf_get_post_status", "Check post publishing status", { postSubmissionId: z.string() }, async ({ postSubmissionId }) => {
+    const post = posts[postSubmissionId];
+    if (!post) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, ...post }) }] };
+  });
 
-mcpServer.tool("pf_delete_schedule", "Cancel a scheduled post", { scheduleId: z.string() }, async ({ scheduleId }) => {
-  const idx = schedules.findIndex(s => s.id === scheduleId);
-  if (idx === -1) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
-  const [r] = schedules.splice(idx, 1);
-  delete posts[r.postId];
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, message: "Cancelled" }) }] };
-});
+  srv.tool("pf_list_schedules", "List upcoming scheduled posts", { userId: z.string().optional() }, async ({ userId }) => {
+    const pending = schedules.filter(s => s.status === "pending" && (!userId || s.userId === userId));
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, count: pending.length, schedules: pending }) }] };
+  });
 
-mcpServer.tool("pf_update_schedule", "Edit or reschedule a queued post", { scheduleId: z.string(), scheduledTime: z.string().optional(), text: z.string().optional() }, async ({ scheduleId, scheduledTime, text }) => {
-  const s = schedules.find(x => x.id === scheduleId);
-  if (!s) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
-  if (scheduledTime) s.scheduledTime = scheduledTime;
-  if (text) { const p = posts[s.postId]; if (p) p.text = text; }
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, updated: s }) }] };
-});
+  srv.tool("pf_delete_schedule", "Cancel a scheduled post", { scheduleId: z.string() }, async ({ scheduleId }) => {
+    const idx = schedules.findIndex(s => s.id === scheduleId);
+    if (idx === -1) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
+    const [r] = schedules.splice(idx, 1); delete posts[r.postId];
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, message: "Cancelled" }) }] };
+  });
 
-mcpServer.tool("pf_get_schedule", "Get details of a scheduled post", { scheduleId: z.string() }, async ({ scheduleId }) => {
-  const s = schedules.find(x => x.id === scheduleId);
-  if (!s) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, schedule: s, post: posts[s.postId] }) }] };
-});
+  srv.tool("pf_update_schedule", "Edit or reschedule a queued post", { scheduleId: z.string(), scheduledTime: z.string().optional(), text: z.string().optional() }, async ({ scheduleId, scheduledTime, text }) => {
+    const s = schedules.find(x => x.id === scheduleId);
+    if (!s) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
+    if (scheduledTime) s.scheduledTime = scheduledTime;
+    if (text) { const p = posts[s.postId]; if (p) p.text = text; }
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, updated: s }) }] };
+  });
 
-mcpServer.tool("pf_create_source", "Extract content from URL, YouTube, PDF or text", { sourceType: z.enum(["youtube","article","twitter","tiktok","text","pdf","audio"]), url: z.string().optional(), text: z.string().optional(), customInstructions: z.string().optional() }, async ({ sourceType, url, text, customInstructions }) => {
-  if (!url && !text) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Provide url or text" }) }] };
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, id: makeId("src"), sourceType, url: url || null, status: "completed", content: text || `Extracted from ${url}`, keyPoints: ["Key insight", "Supporting data", "Actionable takeaway"], customInstructions: customInstructions || null, createdAt: now() }) }] };
-});
+  srv.tool("pf_get_schedule", "Get details of a scheduled post", { scheduleId: z.string() }, async ({ scheduleId }) => {
+    const s = schedules.find(x => x.id === scheduleId);
+    if (!s) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, schedule: s, post: posts[s.postId] }) }] };
+  });
 
-mcpServer.tool("pf_get_source_status", "Poll source extraction status", { id: z.string() }, async ({ id }) =>
-  ({ content: [{ type: "text", text: JSON.stringify({ success: true, id, status: "completed" }) }] }));
+  srv.tool("pf_create_source", "Extract content from URL, YouTube, PDF or text", {
+    sourceType: z.enum(["youtube","article","twitter","tiktok","text","pdf","audio"]),
+    url: z.string().optional(), text: z.string().optional(), customInstructions: z.string().optional(),
+  }, async ({ sourceType, url, text, customInstructions }) => {
+    if (!url && !text) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Provide url or text" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, id: makeId("src"), sourceType, url: url || null, status: "completed", content: text || `Extracted from ${url}`, keyPoints: ["Key insight", "Supporting data", "Actionable takeaway"], customInstructions: customInstructions || null, createdAt: now() }) }] };
+  });
 
-mcpServer.tool("pf_list_visual_templates", "List visual templates", { search: z.string().optional() }, async ({ search }) => {
-  const t = [{ id:"tpl_001",name:"Infographic",type:"image" },{ id:"tpl_002",name:"Carousel",type:"carousel" },{ id:"tpl_003",name:"Quote card",type:"image" },{ id:"tpl_004",name:"AI Video",type:"video" },{ id:"tpl_005",name:"Mind map",type:"image" },{ id:"tpl_006",name:"Timeline",type:"carousel" }];
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, templates: search ? t.filter(x => x.name.toLowerCase().includes(search.toLowerCase())) : t }) }] };
-});
+  srv.tool("pf_get_source_status", "Poll source extraction status", { id: z.string() }, async ({ id }) =>
+    ({ content: [{ type: "text", text: JSON.stringify({ success: true, id, status: "completed" }) }] }));
 
-mcpServer.tool("pf_create_visual", "Generate image, carousel or video", { templateId: z.string(), prompt: z.string().optional() }, async ({ templateId, prompt }) => {
-  const visId = makeId("vis");
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, visualId: visId, templateId, status: "done", imageUrls: [`https://postflow.app/visuals/${visId}.jpg`] }) }] };
-});
+  srv.tool("pf_list_visual_templates", "List visual templates", { search: z.string().optional() }, async ({ search }) => {
+    const t = [{ id:"tpl_001",name:"Infographic",type:"image" },{ id:"tpl_002",name:"Carousel",type:"carousel" },{ id:"tpl_003",name:"Quote card",type:"image" },{ id:"tpl_004",name:"AI Video",type:"video" }];
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, templates: search ? t.filter(x => x.name.toLowerCase().includes(search.toLowerCase())) : t }) }] };
+  });
 
-mcpServer.tool("pf_get_visual_status", "Poll visual generation status", { id: z.string() }, async ({ id }) =>
-  ({ content: [{ type: "text", text: JSON.stringify({ success: true, id, status: "done", imageUrls: [`https://postflow.app/visuals/${id}.jpg`] }) }] }));
+  srv.tool("pf_create_visual", "Generate image, carousel or video", { templateId: z.string(), prompt: z.string().optional() }, async ({ templateId, prompt }) => {
+    const visId = makeId("vis");
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, visualId: visId, templateId, status: "done", imageUrls: [`${BASE_URL}/visuals/${visId}.jpg`] }) }] };
+  });
 
-mcpServer.tool("pf_upload_media", "Get presigned URL to upload local media", { filename: z.string() }, async ({ filename }) => {
-  const mid = makeId("media");
-  return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
-});
+  srv.tool("pf_get_visual_status", "Poll visual generation status", { id: z.string() }, async ({ id }) =>
+    ({ content: [{ type: "text", text: JSON.stringify({ success: true, id, status: "done", imageUrls: [`${BASE_URL}/visuals/${id}.jpg`] }) }] }));
 
-// ─── MCP Endpoints ────────────────────────────────────────────────────────────
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+  srv.tool("pf_upload_media", "Get presigned URL to upload local media", { filename: z.string() }, async ({ filename }) => {
+    const mid = makeId("media");
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
+  });
 
+  return srv;
+}
+
+// SSE sessions
 const sseTransports = new Map();
 
-// GET /mcp — SSE transport (Claude.ai web connector uses this)
+// GET /mcp — SSE (Claude Desktop / Claude.ai)
 app.get("/mcp", async (req, res) => {
   try {
     res.setHeader("Access-Control-Allow-Origin", "*");
+    const srv = createMcpServer();
     const transport = new SSEServerTransport("/mcp", res);
     sseTransports.set(transport.sessionId, transport);
-    res.on("close", () => sseTransports.delete(transport.sessionId));
-    await mcpServer.connect(transport);
+    res.on("close", () => {
+      sseTransports.delete(transport.sessionId);
+      transport.close().catch(() => {});
+    });
+    await srv.connect(transport);
   } catch (err) {
     console.error("SSE error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
-// POST /mcp — handles SSE messages + Streamable HTTP
+// POST /mcp — SSE messages + Streamable HTTP
 app.post("/mcp", async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   const sessionId = req.query.sessionId || req.headers["mcp-session-id"];
@@ -439,13 +435,15 @@ app.post("/mcp", async (req, res) => {
     try { await sseT.handlePostMessage(req, res); } catch (err) { if (!res.headersSent) res.status(500).json({ error: err.message }); }
     return;
   }
+  // Streamable HTTP — new server instance per session
   try {
     const sid = req.headers["mcp-session-id"] || makeId("sess");
     let transport = transports.get(sid);
     if (!transport) {
+      const srv = createMcpServer();
       transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => sid });
       transports.set(sid, transport);
-      await mcpServer.connect(transport);
+      await srv.connect(transport);
     }
     res.setHeader("mcp-session-id", sid);
     await transport.handleRequest(req, res, req.body);
