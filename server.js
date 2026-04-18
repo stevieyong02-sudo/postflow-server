@@ -411,46 +411,43 @@ mcpServer.tool("pf_upload_media", "Get presigned URL to upload local media", { f
   return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
 });
 
-// ─── SSE Transport for Claude.ai connector ───────────────────────────────────
+// ─── MCP Endpoints ────────────────────────────────────────────────────────────
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
 const sseTransports = new Map();
 
-// SSE endpoint — Claude.ai connects here
+// GET /mcp — SSE transport (Claude.ai web connector uses this)
 app.get("/mcp", async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-
-  const transport = new SSEServerTransport("/mcp/messages", res);
-  const sessId    = makeId("sse");
-  sseTransports.set(sessId, transport);
-
-  res.on("close", () => sseTransports.delete(sessId));
-
-  await mcpServer.connect(transport);
-});
-
-// SSE message handler
-app.post("/mcp/messages", async (req, res) => {
-  const sessId  = req.query.sessionId;
-  const transport = sessId ? sseTransports.get(sessId) : [...sseTransports.values()][0];
-  if (!transport) return res.status(404).json({ error: "No active SSE session" });
-  await transport.handlePostMessage(req, res);
-});
-
-// Streamable HTTP endpoint (for other clients)
-app.post("/mcp", async (req, res) => {
   try {
-    const sessionId = req.headers["mcp-session-id"] || makeId("sess");
-    let transport   = transports.get(sessionId);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    const transport = new SSEServerTransport("/mcp", res);
+    sseTransports.set(transport.sessionId, transport);
+    res.on("close", () => sseTransports.delete(transport.sessionId));
+    await mcpServer.connect(transport);
+  } catch (err) {
+    console.error("SSE error:", err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /mcp — handles SSE messages + Streamable HTTP
+app.post("/mcp", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const sessionId = req.query.sessionId || req.headers["mcp-session-id"];
+  const sseT = sessionId ? sseTransports.get(sessionId) : null;
+  if (sseT) {
+    try { await sseT.handlePostMessage(req, res); } catch (err) { if (!res.headersSent) res.status(500).json({ error: err.message }); }
+    return;
+  }
+  try {
+    const sid = req.headers["mcp-session-id"] || makeId("sess");
+    let transport = transports.get(sid);
     if (!transport) {
-      transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => sessionId });
-      transports.set(sessionId, transport);
+      transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => sid });
+      transports.set(sid, transport);
       await mcpServer.connect(transport);
     }
-    res.setHeader("mcp-session-id", sessionId);
+    res.setHeader("mcp-session-id", sid);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
