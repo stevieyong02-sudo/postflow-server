@@ -313,7 +313,17 @@ app.post("/api/generate-image", async (req, res) => {
 const imageStore = {};
 
 app.get("/api/images", (req, res) => {
-  res.json({ images: Object.values(imageStore).reverse().slice(0, 50) });
+  res.json({ images: Object.values(imageStore).reverse().slice(0, 50).map(i => ({...i, base64: undefined, url: BASE_URL + "/api/images/" + i.id})) });
+});
+
+// Serve individual image by ID
+app.get("/api/images/:id", (req, res) => {
+  const img = imageStore[req.params.id];
+  if (!img) return res.status(404).json({ error: "Image not found" });
+  const buf = Buffer.from(img.base64, "base64");
+  res.setHeader("Content-Type", "image/webp");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.send(buf);
 });
 
 // ─── Published posts log ──────────────────────────────────────────────────────
@@ -501,6 +511,48 @@ function createMcpServer() {
     const mid = makeId("media");
     return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
   });
+
+  srv.tool("pf_generate_image",
+    "Generate an AI image using Stability AI. Returns image data you can use in posts.",
+    {
+      prompt: z.string().describe("Detailed description of the image to generate"),
+      style: z.string().optional().describe("Style: photographic, digital-art, cinematic, anime, 3d-model, neon-punk, comic-book"),
+      size: z.string().optional().describe("Size: 1024x1024 (square), 1344x768 (landscape), 768x1344 (portrait)"),
+    },
+    async ({ prompt, style = "photographic", size = "1024x1024" }) => {
+      if (!STABILITY_API_KEY) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "STABILITY_API_KEY not set on server. Add it to Railway environment variables." }) }] };
+      try {
+        const [width, height] = size.split("x").map(Number);
+        const fd = new FormData();
+        fd.append("prompt", prompt);
+        fd.append("output_format", "webp");
+        fd.append("style_preset", style);
+        fd.append("width", String(width || 1024));
+        fd.append("height", String(height || 1024));
+        const r = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + STABILITY_API_KEY, "Accept": "application/json" },
+          body: fd,
+        });
+        const data = await r.json();
+        if (data.errors) throw new Error(data.errors.join(", "));
+        if (!data.image) throw new Error("No image returned: " + JSON.stringify(data));
+        const imageId = makeId("img");
+        imageStore[imageId] = { id: imageId, base64: data.image, prompt, style, size, createdAt: now() };
+        return { content: [{ type: "text", text: JSON.stringify({
+          success: true,
+          imageId,
+          prompt,
+          style,
+          size,
+          previewUrl: BASE_URL + "/api/images/" + imageId,
+          message: "Image generated! Use pf_create_post with mediaUrls: ['" + BASE_URL + "/api/images/" + imageId + "'] to post it to Facebook.",
+        }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: err.message }) }] };
+      }
+    }
+  );
 
   return srv;
 }
