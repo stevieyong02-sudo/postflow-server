@@ -27,11 +27,13 @@ import { z } from "zod";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const {
-  FB_APP_ID       = "",
-  FB_APP_SECRET   = "",
-  SESSION_SECRET  = "postflow-secret-change-this",
-  PORT            = "3333",
-  BASE_URL        = `http://localhost:${PORT}`,   // Change to your Railway/Render URL in prod
+  FB_APP_ID         = "",
+  FB_APP_SECRET     = "",
+  SESSION_SECRET    = "postflow-secret-change-this",
+  PORT              = "3333",
+  BASE_URL          = `http://localhost:${PORT}`,
+  STABILITY_API_KEY = "",
+  CLAUDE_API_KEY    = "",
 } = process.env;
 
 const FB_API         = "https://graph.facebook.com/v22.0";
@@ -269,6 +271,104 @@ app.delete("/api/schedules/:id", (req, res) => {
   const [removed] = schedules.splice(idx, 1);
   delete posts[removed.postId];
   res.json({ success: true, message: "Cancelled" });
+});
+
+
+// ─── Image Generation (Stability AI) ─────────────────────────────────────────
+app.post("/api/generate-image", async (req, res) => {
+  const { prompt, style = "photographic", width = 1024, height = 1024 } = req.body;
+  if (!prompt) return res.status(400).json({ error: "prompt required" });
+  if (!STABILITY_API_KEY) return res.status(400).json({ error: "STABILITY_API_KEY not configured" });
+
+  try {
+    const r = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${STABILITY_API_KEY}`,
+        "Accept": "application/json",
+      },
+      body: (() => {
+        const fd = new FormData();
+        fd.append("prompt", prompt);
+        fd.append("output_format", "webp");
+        fd.append("style_preset", style);
+        fd.append("width", width);
+        fd.append("height", height);
+        return fd;
+      })(),
+    });
+    const data = await r.json();
+    if (data.errors) throw new Error(data.errors.join(", "));
+    const imageUrl = `data:image/webp;base64,${data.image}`;
+    const imageId  = makeId("img");
+    // Store in memory (use cloud storage in production)
+    imageStore[imageId] = { id: imageId, url: imageUrl, prompt, style, createdAt: now() };
+    res.json({ success: true, imageId, url: imageUrl, prompt });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── Image store ──────────────────────────────────────────────────────────────
+const imageStore = {};
+
+app.get("/api/images", (req, res) => {
+  res.json({ images: Object.values(imageStore).reverse().slice(0, 50) });
+});
+
+// ─── Published posts log ──────────────────────────────────────────────────────
+app.get("/api/posts", (req, res) => {
+  const uid = req.query.userId;
+  const allPosts = Object.values(posts)
+    .filter(p => !uid || p.userId === uid)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 100);
+  res.json({ posts: allPosts });
+});
+
+// ─── AI Content Generation (via Claude API) ───────────────────────────────────
+app.post("/api/generate-content", async (req, res) => {
+  const { topic, platforms = ["facebook"], tone = "Professional", language = "English", days = 1 } = req.body;
+  if (!CLAUDE_API_KEY) return res.status(400).json({ error: "CLAUDE_API_KEY not configured" });
+
+  try {
+    const prompt = `Write ${days} day${days>1?'s':''} of social media posts for: ${platforms.join(", ")}. 
+Topic: "${topic}". Tone: ${tone}. Language: ${language}.
+Character limits: facebook 63206, instagram 2200, twitter 280, linkedin 3000.
+Return ONLY valid JSON array where each item has: { day: number, platform: string, text: string, hashtags: string[], bestTime: string }
+No markdown, no explanation.`;
+
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+    });
+    const data = await r.json();
+    const text = data.content?.[0]?.text || "[]";
+    const posts = JSON.parse(text.replace(/```json|```/g, "").trim());
+    res.json({ success: true, posts });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── Viral AI Coach ───────────────────────────────────────────────────────────
+app.post("/api/viral-coach", async (req, res) => {
+  const { postText, platform = "facebook" } = req.body;
+  if (!CLAUDE_API_KEY) return res.status(400).json({ error: "CLAUDE_API_KEY not configured" });
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": CLAUDE_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, messages: [{ role: "user", content: `Analyze this ${platform} post for viral potential. Give a score 1-10, explain what works, what to improve, and rewrite it to be more viral. Post: "${postText}". Return JSON: { score: number, whatWorks: string, improvements: string[], rewritten: string }` }] }),
+    });
+    const data = await r.json();
+    const text = data.content?.[0]?.text || "{}";
+    res.json({ success: true, analysis: JSON.parse(text.replace(/```json|```/g, "").trim()) });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
 });
 
 // ─── Auto-fire scheduler (every 60 seconds) ───────────────────────────────────
