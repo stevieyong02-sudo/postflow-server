@@ -1039,44 +1039,124 @@ function removeSchedItem(id){
 function renderSchedItems(){
   var container = document.getElementById('sched-items');
   if(!container) return;
-  if(!schedItems.length){
-    container.innerHTML = '';
-    return;
-  }
+  container.innerHTML = '';
+  if(!schedItems.length) return;
 
-  container.innerHTML = schedItems.map(function(item){
+  schedItems.forEach(function(item){
     var now = new Date();
     now.setHours(now.getHours()+1, 0, 0, 0);
     var defaultTime = now.toISOString().slice(0,16);
 
-    var platOpts = PLAT_OPTIONS.map(function(p){
-      return '<option value="' + p.val + '"' + (item.platform===p.val?' selected':'') + '>' + p.emoji + ' ' + p.label + '</option>';
-    }).join('');
+    // Outer wrapper
+    var wrap = document.createElement('div');
+    wrap.id = 'sched-item-' + item.id;
+    wrap.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:var(--rl);padding:14px;display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start';
 
-    var imgHtml = item.imageData
-      ? '<img src="' + item.imageData + '" style="width:100%;height:100%;object-fit:cover;border-radius:6px">'
-      : '<div onclick="triggerImgUpload(' + item.id + ')" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;color:var(--text3)"><div style="font-size:22px">🖼️</div><div style="font-size:10px">Click to add image</div></div>';
+    // Left - image area
+    var imgWrap = document.createElement('div');
+    imgWrap.style.position = 'relative';
 
-    return '<div id="sched-item-' + item.id + '" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rl);padding:14px;display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start">'
-      + '<div style="position:relative">'
-      + '<div style="width:120px;height:120px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:var(--bg4)">' + imgHtml + '</div>'
-      + '<input type="file" id="img-upload-' + item.id + '" accept="image/*" style="display:none" onchange="updateSchedImage(' + item.id + ',this)">'
-      + (item.imageData ? '<button onclick="triggerImgUpload(' + item.id + ')" style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:9px;padding:3px 6px;border-radius:4px;cursor:pointer">Change</button>' : '')
-      + '</div>'
-      + '<div style="display:flex;flex-direction:column;gap:8px">'
-      + '<div style="display:flex;gap:8px">'
-      + '<select onchange="updateSchedField(' + item.id + ',\'platform\',this.value)" style="height:34px;font-size:12px;flex:1">' + platOpts + '</select>'
-      + '<input type="datetime-local" onchange="updateSchedField(' + item.id + ',\'scheduledTime\',this.value)" value="' + (item.scheduledTime||defaultTime) + '" style="height:34px;font-size:11px;flex:1;font-family:monospace">'
-      + '<button onclick="removeSchedItem(' + item.id + ')" style="width:34px;height:34px;border-radius:6px;background:none;border:1px solid var(--border2);color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0">✕</button>'
-      + '</div>'
-      + '<textarea onchange="updateSchedField(' + item.id + ',\'content\',this.value)" oninput="updateSchedField(' + item.id + ',\'content\',this.value)" placeholder="Write your post content here..." rows="4" style="resize:vertical;font-size:12.5px;line-height:1.6">' + item.content + '</textarea>'
-      + '<div style="display:flex;justify-content:space-between;align-items:center">'
-      + '<span style="font-size:10.5px;color:var(--text3)" id="char-count-' + item.id + '">' + item.content.length + ' chars</span>'
-      + '<button onclick="scheduleOneItem(' + item.id + ')" style="padding:5px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:11px;cursor:pointer;font-family:inherit">Schedule this</button>'
-      + '</div>'
-      + '</div>'
-      + '</div>';
-  }).join('');
+    var imgBox = document.createElement('div');
+    imgBox.style.cssText = 'width:120px;height:120px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:var(--bg4);cursor:pointer';
+
+    if(item.imageData){
+      var img = document.createElement('img');
+      img.src = item.imageData;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+      imgBox.appendChild(img);
+      imgBox.onclick = function(){ document.getElementById('img-upload-' + item.id).click(); };
+    } else {
+      imgBox.style.display = 'flex';
+      imgBox.style.flexDirection = 'column';
+      imgBox.style.alignItems = 'center';
+      imgBox.style.justifyContent = 'center';
+      imgBox.style.gap = '6px';
+      imgBox.innerHTML = '<div style="font-size:22px">🖼️</div><div style="font-size:10px;color:var(--text3)">Click to add</div>';
+      imgBox.onclick = function(){ document.getElementById('img-upload-' + item.id).click(); };
+    }
+
+    var fileInp = document.createElement('input');
+    fileInp.type = 'file';
+    fileInp.id = 'img-upload-' + item.id;
+    fileInp.accept = 'image/*';
+    fileInp.style.display = 'none';
+    fileInp.onchange = function(){ updateSchedImage(item.id, this); };
+
+    imgWrap.appendChild(imgBox);
+    imgWrap.appendChild(fileInp);
+
+    // Right - content area
+    var right = document.createElement('div');
+    right.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+
+    // Top row - platform + datetime + delete
+    var topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;gap:8px;align-items:center';
+
+    var platSel = document.createElement('select');
+    platSel.style.cssText = 'height:34px;font-size:12px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);padding:0 8px';
+    PLAT_OPTIONS.forEach(function(p){
+      var opt = document.createElement('option');
+      opt.value = p.val;
+      opt.textContent = p.emoji + ' ' + p.label;
+      if(item.platform === p.val) opt.selected = true;
+      platSel.appendChild(opt);
+    });
+    platSel.onchange = function(){ updateSchedField(item.id, 'platform', this.value); };
+
+    var dtInp = document.createElement('input');
+    dtInp.type = 'datetime-local';
+    dtInp.value = item.scheduledTime || defaultTime;
+    dtInp.style.cssText = 'height:34px;font-size:11px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);padding:0 8px;font-family:monospace';
+    dtInp.onchange = function(){ updateSchedField(item.id, 'scheduledTime', this.value); };
+
+    var delBtn = document.createElement('button');
+    delBtn.textContent = '✕';
+    delBtn.style.cssText = 'width:34px;height:34px;border-radius:6px;background:none;border:1px solid var(--border2);color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0';
+    delBtn.onclick = function(){ removeSchedItem(item.id); };
+
+    topRow.appendChild(platSel);
+    topRow.appendChild(dtInp);
+    topRow.appendChild(delBtn);
+
+    // Textarea
+    var ta = document.createElement('textarea');
+    ta.placeholder = 'Write your post content here...';
+    ta.rows = 4;
+    ta.value = item.content;
+    ta.style.cssText = 'resize:vertical;font-size:12.5px;line-height:1.6;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:inherit;padding:9px 11px;outline:none;width:100%';
+    ta.oninput = function(){ 
+      updateSchedField(item.id, 'content', this.value);
+      var cc = document.getElementById('char-' + item.id);
+      if(cc) cc.textContent = this.value.length + ' chars';
+    };
+
+    // Bottom row
+    var botRow = document.createElement('div');
+    botRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+
+    var charCount = document.createElement('span');
+    charCount.id = 'char-' + item.id;
+    charCount.style.cssText = 'font-size:10.5px;color:var(--text3)';
+    charCount.textContent = item.content.length + ' chars';
+
+    var schedBtn = document.createElement('button');
+    schedBtn.id = 'sched-btn-' + item.id;
+    schedBtn.textContent = 'Schedule this';
+    schedBtn.style.cssText = 'padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:600';
+    schedBtn.onclick = function(){ scheduleOneItem(item.id); };
+
+    botRow.appendChild(charCount);
+    botRow.appendChild(schedBtn);
+
+    right.appendChild(topRow);
+    right.appendChild(ta);
+    right.appendChild(botRow);
+
+    wrap.appendChild(imgWrap);
+    wrap.appendChild(right);
+    container.appendChild(wrap);
+  });
 }
 
 function triggerImgUpload(id){
