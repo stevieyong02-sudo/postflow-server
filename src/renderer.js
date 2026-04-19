@@ -18,6 +18,9 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 
 let bundleCache = null;
 
+// Use system Chrome on Railway (installed via Dockerfile)
+const CHROME_EXECUTABLE = process.env.REMOTION_CHROME_EXECUTABLE || undefined;
+
 export async function renderVideo({ slides, outputFilename }) {
   const videoId = outputFilename || `video_${crypto.randomBytes(6).toString('hex')}`;
   const outputPath = path.join(OUTPUT_DIR, `${videoId}.mp4`);
@@ -49,6 +52,7 @@ export async function renderVideo({ slides, outputFilename }) {
       codec: 'h264',
       outputLocation: outputPath,
       inputProps: { slides },
+      chromiumOptions: CHROME_EXECUTABLE ? { executablePath: CHROME_EXECUTABLE } : {},
       onProgress: ({ progress }) => {
         process.stdout.write(`\r[Renderer] ${Math.round(progress * 100)}%`);
       },
