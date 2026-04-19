@@ -868,15 +868,17 @@ function vidQuick(text){ document.getElementById('vid-inp').value=text; sendVidM
 function appendVidMsg(role, text){
   const msgs = document.getElementById('vid-msgs');
   const div = document.createElement('div');
-  div.style.cssText = `display:flex;gap:8px;animation:mi .2s ease;${role==='user'?'flex-direction:row-reverse':''}`;
-  div.innerHTML = `
-    <div style="width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'Syne',sans-serif;background:${role==='ai'?'var(--accent)':'var(--bg4)'};color:${role==='ai'?'#fff':'var(--text2)'}">
-      ${role==='ai'?'AI':'ME'}
-    </div>
-    <div style="max-width:85%;padding:9px 13px;border-radius:11px;font-size:12.5px;line-height:1.6;background:${role==='ai'?'var(--bg3)':'rgba(108,71,255,.16)'};border:1px solid ${role==='ai'?'var(--border)':'rgba(108,71,255,.26)'};${role==='user'?'border-bottom-right-radius:3px':'border-bottom-left-radius:3px'}">
-      ${text.replace(/
-/g,'<br>')}
-    </div>`;
+  const isUser = role === 'user';
+  div.style.cssText = 'display:flex;gap:8px;animation:mi .2s ease;' + (isUser ? 'flex-direction:row-reverse' : '');
+  const av = document.createElement('div');
+  av.style.cssText = 'width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:Syne,sans-serif;background:' + (isUser ? 'var(--bg4)' : 'var(--accent)') + ';color:' + (isUser ? 'var(--text2)' : '#fff');
+  av.textContent = isUser ? 'ME' : 'AI';
+  const bubble = document.createElement('div');
+  bubble.style.cssText = 'max-width:85%;padding:9px 13px;border-radius:11px;font-size:12.5px;line-height:1.6;background:' + (isUser ? 'rgba(108,71,255,.16)' : 'var(--bg3)') + ';border:1px solid ' + (isUser ? 'rgba(108,71,255,.26)' : 'var(--border)') + ';' + (isUser ? 'border-bottom-right-radius:3px' : 'border-bottom-left-radius:3px');
+  bubble.innerHTML = text.replace(/
+/g,'<br>');
+  div.appendChild(av);
+  div.appendChild(bubble);
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
