@@ -34,6 +34,8 @@ const {
   BASE_URL          = `http://localhost:${PORT}`,
   STABILITY_API_KEY = "",
   CLAUDE_API_KEY    = "",
+  REPLICATE_API_KEY = "",
+  FAL_API_KEY       = "",
 } = process.env;
 
 const FB_API         = "https://graph.facebook.com/v22.0";
@@ -381,6 +383,149 @@ app.post("/api/viral-coach", async (req, res) => {
   }
 });
 
+// ─── Replicate Image Generation (Recraft v3) ─────────────────────────────────
+app.post("/api/generate-image-recraft", async (req, res) => {
+  const { prompt, style = "realistic_image", width = 1024, height = 1024 } = req.body;
+  if (!REPLICATE_API_KEY) return res.status(400).json({ error: "REPLICATE_API_KEY not configured" });
+  try {
+    // Start prediction
+    const startRes = await fetch("https://api.replicate.com/v1/models/recraft-ai/recraft-v3/predictions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}`, "Content-Type": "application/json", "Prefer": "wait" },
+      body: JSON.stringify({ input: { prompt, style, width, height, output_format: "webp" } }),
+    });
+    const startData = await startRes.json();
+    if (startData.error) throw new Error(startData.error);
+
+    // Poll until done
+    let output = startData.output;
+    let predId = startData.id;
+    let attempts = 0;
+    while (!output && attempts < 30) {
+      await new Promise(r => setTimeout(r, 2000));
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, { headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}` } });
+      const pollData = await poll.json();
+      if (pollData.status === "failed") throw new Error(pollData.error || "Prediction failed");
+      if (pollData.status === "succeeded") output = pollData.output;
+      attempts++;
+    }
+
+    if (!output) throw new Error("Image generation timed out");
+    const imageUrl = Array.isArray(output) ? output[0] : output;
+    const imageId = makeId("img");
+    imageStore[imageId] = { id: imageId, url: imageUrl, prompt, style, createdAt: now() };
+    res.json({ success: true, imageId, url: imageUrl, prompt });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── fal.ai Video Generation (Framepack) ─────────────────────────────────────
+app.post("/api/generate-video", async (req, res) => {
+  const { imageUrl, prompt = "smooth cinematic motion", duration = 5 } = req.body;
+  if (!FAL_API_KEY) return res.status(400).json({ error: "FAL_API_KEY not configured" });
+  if (!imageUrl) return res.status(400).json({ error: "imageUrl required" });
+  try {
+    // Submit job to fal.ai framepack
+    const submitRes = await fetch("https://queue.fal.run/fal-ai/framepack", {
+      method: "POST",
+      headers: { "Authorization": `Key ${FAL_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: imageUrl, prompt, num_frames: duration * 8, guidance_scale: 7.5 }),
+    });
+    const submitData = await submitRes.json();
+    if (submitData.error) throw new Error(submitData.error.message || JSON.stringify(submitData.error));
+    const requestId = submitData.request_id;
+
+    // Poll for result
+    let videoUrl = null;
+    let attempts = 0;
+    while (!videoUrl && attempts < 40) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://queue.fal.run/fal-ai/framepack/requests/${requestId}`, {
+        headers: { "Authorization": `Key ${FAL_API_KEY}` },
+      });
+      const pollData = await pollRes.json();
+      if (pollData.status === "FAILED") throw new Error(pollData.error || "Video generation failed");
+      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) {
+        videoUrl = pollData.output.video.url;
+      }
+      attempts++;
+    }
+
+    if (!videoUrl) throw new Error("Video generation timed out");
+    const videoId = makeId("vid");
+    videoStore[videoId] = { id: videoId, url: videoUrl, imageUrl, prompt, createdAt: now() };
+    res.json({ success: true, videoId, url: videoUrl, prompt });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── Multi-slide video (generate multiple images then animate first) ──────────
+app.post("/api/generate-slideshow", async (req, res) => {
+  const { slides = [], prompt = "cinematic motion", duration = 5 } = req.body;
+  if (!REPLICATE_API_KEY || !FAL_API_KEY) return res.status(400).json({ error: "REPLICATE_API_KEY and FAL_API_KEY required" });
+  if (!slides.length) return res.status(400).json({ error: "slides array required" });
+
+  try {
+    // Generate images for all slides in parallel
+    const imagePromises = slides.map(async (slide) => {
+      const startRes = await fetch("https://api.replicate.com/v1/models/recraft-ai/recraft-v3/predictions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}`, "Content-Type": "application/json", "Prefer": "wait" },
+        body: JSON.stringify({ input: { prompt: slide.imagePrompt || slide.text, style: "realistic_image", width: 768, height: 1344, output_format: "webp" } }),
+      });
+      const startData = await startRes.json();
+      let output = startData.output;
+      let predId = startData.id;
+      let attempts = 0;
+      while (!output && attempts < 30) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, { headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}` } });
+        const pollData = await poll.json();
+        if (pollData.status === "succeeded") output = pollData.output;
+        if (pollData.status === "failed") throw new Error("Image failed: " + predId);
+        attempts++;
+      }
+      return { text: slide.text, imageUrl: Array.isArray(output) ? output[0] : output };
+    });
+
+    const generatedSlides = await Promise.all(imagePromises);
+
+    // Animate first image into video using framepack
+    const firstImage = generatedSlides[0].imageUrl;
+    const submitRes = await fetch("https://queue.fal.run/fal-ai/framepack", {
+      method: "POST",
+      headers: { "Authorization": `Key ${FAL_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: firstImage, prompt, num_frames: duration * 8, guidance_scale: 7.5 }),
+    });
+    const submitData = await submitRes.json();
+    const requestId = submitData.request_id;
+
+    let videoUrl = null;
+    let attempts = 0;
+    while (!videoUrl && attempts < 40) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://queue.fal.run/fal-ai/framepack/requests/${requestId}`, { headers: { "Authorization": `Key ${FAL_API_KEY}` } });
+      const pollData = await pollRes.json();
+      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) videoUrl = pollData.output.video.url;
+      if (pollData.status === "FAILED") throw new Error("Video failed");
+      attempts++;
+    }
+
+    const slideshowId = makeId("show");
+    videoStore[slideshowId] = { id: slideshowId, url: videoUrl, slides: generatedSlides, createdAt: now() };
+    res.json({ success: true, slideshowId, videoUrl, slides: generatedSlides, message: "Slideshow generated! Use videoUrl in pf_create_post mediaUrls." });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+const videoStore = {};
+app.get("/api/videos", (req, res) => {
+  res.json({ videos: Object.values(videoStore).reverse().slice(0, 20) });
+});
+
 // ─── Auto-fire scheduler (every 60 seconds) ───────────────────────────────────
 setInterval(async () => {
   const due = schedules.filter(s => s.status === "pending" && new Date(s.scheduledTime) <= new Date());
@@ -511,6 +656,66 @@ function createMcpServer() {
     const mid = makeId("media");
     return { content: [{ type: "text", text: JSON.stringify({ success: true, mediaId: mid, presignedUrl: `${BASE_URL}/upload/${mid}?file=${filename}`, publicUrl: `${BASE_URL}/media/${mid}/${filename}`, expiresIn: "5 minutes" }) }] };
   });
+
+  srv.tool("pf_generate_video",
+    "Generate an AI video from an image using fal.ai Framepack — same as Blotato uses",
+    {
+      imageUrl: z.string().describe("Public URL of image to animate into video"),
+      prompt: z.string().optional().describe("Motion description e.g. 'smooth cinematic pan'"),
+      duration: z.number().optional().describe("Duration in seconds (default 5)"),
+    },
+    async ({ imageUrl, prompt = "smooth cinematic motion, high quality", duration = 5 }) => {
+      if (!FAL_API_KEY) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "FAL_API_KEY not set on Railway" }) }] };
+      try {
+        const r = await fetch(`${BASE_URL}/api/generate-video`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl, prompt, duration }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          return { content: [{ type: "text", text: JSON.stringify({
+            success: true, videoId: d.videoId, videoUrl: d.url, prompt,
+            message: `✅ Video generated! Use pf_create_post with mediaUrls: ["${d.url}"] to post it to Facebook/Instagram.`,
+          }) }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: d.error }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: err.message }) }] };
+      }
+    }
+  );
+
+  srv.tool("pf_generate_slideshow",
+    "Generate a multi-slide AI video — generate images with Recraft v3 then animate with Framepack. Same pipeline as Blotato.",
+    {
+      slides: z.array(z.object({
+        text: z.string().describe("Caption text for this slide"),
+        imagePrompt: z.string().describe("Image generation prompt for this slide"),
+      })).describe("Array of slides, each with text and image prompt"),
+      motionPrompt: z.string().optional().describe("Video motion style e.g. 'cinematic slow pan'"),
+      duration: z.number().optional().describe("Video duration in seconds (default 5)"),
+    },
+    async ({ slides, motionPrompt = "smooth cinematic motion", duration = 5 }) => {
+      if (!REPLICATE_API_KEY || !FAL_API_KEY) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "REPLICATE_API_KEY and FAL_API_KEY required on Railway" }) }] };
+      try {
+        const r = await fetch(`${BASE_URL}/api/generate-slideshow`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slides, prompt: motionPrompt, duration }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          return { content: [{ type: "text", text: JSON.stringify({
+            success: true, slideshowId: d.slideshowId, videoUrl: d.videoUrl,
+            slides: d.slides?.map(s => ({ text: s.text, imageUrl: s.imageUrl })),
+            message: `✅ Slideshow generated with ${slides.length} slides! Video URL: ${d.videoUrl}. Use pf_create_post with mediaUrls: ["${d.videoUrl}"] to post to Facebook.`,
+          }) }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: d.error }) }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: err.message }) }] };
+      }
+    }
+  );
 
   srv.tool("pf_generate_image",
     "Generate an AI image using Stability AI. Returns image data you can use in posts.",
