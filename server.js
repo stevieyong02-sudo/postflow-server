@@ -24,25 +24,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
-import path from "path";
-import { fileURLToPath } from "url";
-import fs from "fs";
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Lazy load renderer to avoid startup crash
-let renderVideo = null;
-async function getRenderVideo() {
-  if (!renderVideo) {
-    try {
-      const mod = await import("./src/renderer.js");
-      renderVideo = mod.renderVideo;
-    } catch(e) {
-      console.error("Remotion renderer not available:", e.message);
-      return null;
-    }
-  }
-  return renderVideo;
-}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const {
@@ -86,25 +67,6 @@ app.use(session({
 app.use(express.static("public"));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
-// Debug endpoint - test fal.ai directly
-app.get("/debug/fal", async (req, res) => {
-  if (!FAL_API_KEY) return res.json({ error: "FAL_API_KEY not set" });
-  try {
-    // Submit a minimal test request
-    const submitRes = await fetch("https://queue.fal.run/fal-ai/framepack", {
-      method: "POST",
-      headers: { "Authorization": `Key ${FAL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        image_url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=768",
-        prompt: "gentle motion",
-        num_frames: 16
-      }),
-    });
-    const submitData = await submitRes.json();
-    res.json({ submitted: submitData });
-  } catch(e) { res.json({ error: e.message }); }
-});
-
 app.get("/health", (_, res) => res.json({
   status: "ok",
   server: "PostFlow v1.0.0",
@@ -421,207 +383,6 @@ app.post("/api/viral-coach", async (req, res) => {
   }
 });
 
-// ─── AI Video Creation Chat (like Blotato) ───────────────────────────────────
-const videoSessions = {}; // sessionId → { messages, plan }
-
-app.post("/api/video-chat", async (req, res) => {
-  const { message, sessionId } = req.body;
-  if (!CLAUDE_API_KEY) return res.status(400).json({ error: "CLAUDE_API_KEY not configured" });
-
-  const sid = sessionId || makeId("vs");
-  if (!videoSessions[sid]) videoSessions[sid] = { messages: [], plan: null };
-  const session = videoSessions[sid];
-
-  // Add user message
-  session.messages.push({ role: "user", content: message });
-
-  const systemPrompt = `You are PostFlow's AI Video Creator — an expert social media video strategist.
-
-When a user asks you to create a video, you:
-1. First ask 2-3 smart clarifying questions about platform, style, branding, CTA
-2. Once you have enough info (or user says "go for it"), produce a COMPLETE video plan
-
-When producing the plan, respond with ONLY this exact JSON format:
-{
-  "type": "plan",
-  "title": "Video title",
-  "ready": true,
-  "slides": [
-    {
-      "type": "hook",
-      "label": "small label text",
-      "title": "Main headline",
-      "subtitle": "subtitle text",
-      "imagePrompt": "detailed AI image generation prompt"
-    },
-    {
-      "type": "tip",
-      "number": "01",
-      "headline": "Tip headline",
-      "body": "Tip description",
-      "direction": "right",
-      "imagePrompt": "detailed AI image generation prompt"
-    },
-    {
-      "type": "cta",
-      "headline": "Closing headline",
-      "subtitle": "Tagline",
-      "cta": "Call to action text",
-      "imagePrompt": "detailed AI image generation prompt"
-    }
-  ]
-}
-
-When asking clarifying questions, respond conversationally (NOT JSON).
-Keep responses concise and professional.`;
-
-  try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: session.messages
-      })
-    });
-    const data = await r.json();
-    const reply = data.content?.[0]?.text || "Sorry, I couldn't process that.";
-
-    // Add assistant reply to history
-    session.messages.push({ role: "assistant", content: reply });
-
-    // Check if it's a plan
-    let plan = null;
-    try {
-      const parsed = JSON.parse(reply);
-      if (parsed.type === "plan" && parsed.ready) {
-        plan = parsed;
-        session.plan = plan;
-      }
-    } catch {}
-
-    res.json({ success: true, sessionId: sid, reply, plan });
-  } catch(err) {
-    res.json({ success: false, error: err.message });
-  }
-});
-
-// ─── Generate video from plan ─────────────────────────────────────────────────
-app.post("/api/video-from-plan", async (req, res) => {
-  const { sessionId, plan } = req.body;
-  if (!plan?.slides) return res.status(400).json({ error: "No plan provided" });
-
-  const videoId = makeId("vid");
-  renderQueue[videoId] = { status: "generating_images", startedAt: now() };
-  res.json({ success: true, videoId, status: "generating_images", message: "Generating AI images for each slide..." });
-
-  // Generate images for slides that have imagePrompt
-  const slidesWithImages = await Promise.all(plan.slides.map(async (slide) => {
-    if (!slide.imagePrompt || !REPLICATE_API_KEY) return slide;
-    try {
-      const startRes = await fetch("https://api.replicate.com/v1/models/recraft-ai/recraft-v3/predictions", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}`, "Content-Type": "application/json", "Prefer": "wait" },
-        body: JSON.stringify({ input: { prompt: slide.imagePrompt, style: "realistic_image", width: 768, height: 1344, output_format: "webp" } }),
-      });
-      const startData = await startRes.json();
-      let output = startData.output;
-      let predId = startData.id;
-      let attempts = 0;
-      while (!output && attempts < 30) {
-        await new Promise(r => setTimeout(r, 2000));
-        const poll = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, { headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}` } });
-        const pollData = await poll.json();
-        if (pollData.status === "succeeded") output = pollData.output;
-        if (pollData.status === "failed") break;
-        attempts++;
-      }
-      const imageUrl = Array.isArray(output) ? output[0] : output;
-      return { ...slide, imageUrl };
-    } catch(e) {
-      console.error("Image gen failed:", e.message);
-      return slide;
-    }
-  }));
-
-  // Now render with Remotion
-  renderQueue[videoId].status = "rendering";
-  renderQueue[videoId].slides = slidesWithImages;
-
-  try {
-    const render = await getRenderVideo();
-    if(!render) { renderQueue[videoId] = { status: "failed", error: "Remotion not available" }; return; }
-    const result = await render({ slides: slidesWithImages, outputFilename: videoId });
-    if (result.success) {
-      renderQueue[videoId] = { status: "done", videoUrl: result.publicUrl, videoId, slides: slidesWithImages };
-    } else {
-      renderQueue[videoId] = { status: "failed", error: result.error };
-    }
-  } catch(e) {
-    renderQueue[videoId] = { status: "failed", error: e.message };
-  }
-});
-
-// ─── Serve rendered videos ───────────────────────────────────────────────────
-app.use('/videos', (req, res, next) => {
-  const filePath = path.join(__dirname, 'public', 'videos', req.path);
-  if (fs.existsSync(filePath)) {
-    res.sendFile(filePath);
-  } else {
-    next();
-  }
-});
-
-// ─── PostFlow Video Renderer (Remotion) ──────────────────────────────────────
-app.post("/api/render-video", async (req, res) => {
-  const { slides, topic } = req.body;
-  if (!slides && !topic) return res.status(400).json({ error: "slides or topic required" });
-
-  // Build slides from topic if not provided
-  const videoSlides = slides || [
-    { type: 'hook', label: '✦ AI CONTENT ✦', title: topic, subtitle: 'Watch & Learn' },
-    { type: 'tip', number: '01', headline: 'Key Insight', body: `${topic} - important point 1`, direction: 'right' },
-    { type: 'tip', number: '02', headline: 'Main Takeaway', body: `${topic} - important point 2`, direction: 'left' },
-    { type: 'tip', number: '03', headline: 'Action Step', body: `${topic} - take action now`, direction: 'scale' },
-    { type: 'cta', headline: 'Start Today', subtitle: 'Transform Your Life.', cta: 'Save & Share' },
-  ];
-
-  const videoId = `vid_${Date.now()}`;
-  renderQueue[videoId] = { status: 'rendering', startedAt: now() };
-  
-  res.json({ success: true, videoId, status: 'rendering', message: 'Rendering started!' });
-  
-  // Render async in background
-  renderVideo({ slides: videoSlides, outputFilename: videoId }).then(result => {
-    if(result.success) {
-      renderQueue[videoId] = { status: 'done', videoUrl: result.publicUrl, videoId };
-    } else {
-      renderQueue[videoId] = { status: 'failed', error: result.error };
-    }
-    console.log('[Render] Done:', videoId, result.success ? '✅' : '❌');
-  });
-});
-
-const renderQueue = {};
-
-app.get("/api/render-status", (req, res) => {
-  const latest = Object.values(renderQueue).sort((a,b) => b.startedAt > a.startedAt ? 1 : -1)[0];
-  if(!latest) return res.json({ ready: false, status: 'no renders yet' });
-  res.json({ ready: latest.status === 'done', ...latest });
-});
-
-app.get("/api/render-status/:id", (req, res) => {
-  const job = renderQueue[req.params.id];
-  if(!job) return res.status(404).json({ error: 'Job not found' });
-  res.json({ ready: job.status === 'done', ...job });
-});
-
 // ─── Replicate Image Generation (Recraft v3) ─────────────────────────────────
 app.post("/api/generate-image-recraft", async (req, res) => {
   const { prompt, style = "realistic_image", width = 1024, height = 1024 } = req.body;
@@ -684,19 +445,14 @@ app.post("/api/generate-video", async (req, res) => {
         headers: { "Authorization": `Key ${FAL_API_KEY}` },
       });
       const pollData = await pollRes.json();
-      console.log(`[fal.ai single poll ${attempts}] status:`, pollData.status, JSON.stringify(pollData).slice(0,200));
-      if (pollData.status === "FAILED") throw new Error(JSON.stringify(pollData.error) || "Video generation failed");
-      if (pollData.status === "COMPLETED") {
-        videoUrl = pollData.output?.video?.url 
-          || pollData.output?.video_url
-          || pollData.output?.url
-          || (Array.isArray(pollData.output) ? pollData.output[0] : null)
-          || null;
+      if (pollData.status === "FAILED") throw new Error(pollData.error || "Video generation failed");
+      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) {
+        videoUrl = pollData.output.video.url;
       }
       attempts++;
     }
 
-    if (!videoUrl) throw new Error("Video generation timed out or no URL in response");
+    if (!videoUrl) throw new Error("Video generation timed out");
     const videoId = makeId("vid");
     videoStore[videoId] = { id: videoId, url: videoUrl, imageUrl, prompt, createdAt: now() };
     res.json({ success: true, videoId, url: videoUrl, prompt });
@@ -752,21 +508,8 @@ app.post("/api/generate-slideshow", async (req, res) => {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(`https://queue.fal.run/fal-ai/framepack/requests/${requestId}`, { headers: { "Authorization": `Key ${FAL_API_KEY}` } });
       const pollData = await pollRes.json();
-      console.log(`[fal.ai poll ${attempts}] status:`, pollData.status, JSON.stringify(pollData).slice(0, 200));
-      if (pollData.status === "FAILED") throw new Error(JSON.stringify(pollData.error) || "Video failed");
-      // Try all possible output paths
-      if (pollData.status === "COMPLETED") {
-        videoUrl = pollData.output?.video?.url 
-          || pollData.output?.video_url
-          || pollData.output?.url
-          || (Array.isArray(pollData.output) ? pollData.output[0] : null)
-          || pollData.video?.url
-          || null;
-        if (!videoUrl) {
-          console.log("[fal.ai] COMPLETED but no video URL found. Full output:", JSON.stringify(pollData.output));
-          throw new Error("Video completed but no URL found in response: " + JSON.stringify(pollData.output));
-        }
-      }
+      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) videoUrl = pollData.output.video.url;
+      if (pollData.status === "FAILED") throw new Error("Video failed");
       attempts++;
     }
 
