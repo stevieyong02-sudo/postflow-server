@@ -610,6 +610,7 @@ let tone = 'Professional';
 let imgStyle = 'photographic';
 let genPosts = [];
 let currentImgUrl = null;
+let currentVidUrl = null;
 const LIMITS = {facebook:63206,instagram:2200,twitter:280,linkedin:3000,tiktok:2200};
 const PCOL = {facebook:'#1877F2',instagram:'#E1306C',twitter:'#000',linkedin:'#0A66C2',tiktok:'#69C9D0'};
 const PEMO = {facebook:'🔵',instagram:'📸',twitter:'🐦',linkedin:'💼',tiktok:'🎵'};
@@ -855,7 +856,6 @@ function finishConn(){ closeM('m-succ'); ds('accounts',null); }
 window.onclick=e=>['m-pages','m-perms','m-succ'].forEach(id=>{ const el=document.getElementById(id); if(e.target===el)el.classList.remove('on'); });
 
 // ══════ VIDEO GENERATION ══════
-let currentVidUrl = null;
 
 async function generateVideo(){
   const topic = document.getElementById('vid-topic').value.trim();
