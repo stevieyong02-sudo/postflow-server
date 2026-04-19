@@ -882,15 +882,15 @@ async function generateVideo(){
     const d = await r.json();
     if(d.success){
       currentVidUrl = d.videoUrl;
-      document.getElementById('vid-prev').innerHTML=`<video src="${d.videoUrl}" controls style="width:100%;height:100%;object-fit:cover" autoplay loop></video>`;
+      document.getElementById('vid-prev').innerHTML='<video src="' + d.videoUrl + '" controls autoplay loop style="width:100%;height:100%;object-fit:cover"></video>';
       document.getElementById('vid-actions').style.display='flex';
       document.getElementById('vid-notice').innerHTML='<div class="notice ok">✅ Video generated! Download or post to Facebook.</div>';
     } else {
       document.getElementById('vid-prev').innerHTML='<span style="color:var(--red)">Generation failed</span>';
-      document.getElementById('vid-notice').innerHTML=`<div class="notice err">❌ ${d.error}</div>`;
+      document.getElementById('vid-notice').innerHTML='<div class="notice err">Error: ' + d.error + '</div>';
     }
   }catch(e){
-    document.getElementById('vid-notice').innerHTML=`<div class="notice err">❌ ${e.message}</div>`;
+    document.getElementById('vid-notice').innerHTML='<div class="notice err">Error: ' + e.message + '</div>';
   }
   document.getElementById('vid-btn').disabled=false;
   document.getElementById('vid-btn').textContent='🎬 Generate Video';
@@ -907,8 +907,7 @@ async function postVideo(){
   try{
     const r = await fetch(`${SERVER}/api/post`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc.id,text:caption,mediaUrls:[currentVidUrl],platform:'facebook',userId,mediaType:'reel'})});
     const d = await r.json();
-    alert(d.success?`✅ Posted video to ${acc.name}!
-${d.publicUrl||''}`:`❌ ${d.error}`);
+    alert(d.success ? 'Posted to ' + acc.name + '! ' + (d.publicUrl||'') : 'Error: ' + d.error);
   }catch(e){ alert('Error: '+e.message); }
 }
 </script>
