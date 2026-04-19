@@ -882,7 +882,13 @@ async function generateVideo(){
     const d = await r.json();
     if(d.success){
       currentVidUrl = d.videoUrl;
-      document.getElementById('vid-prev').innerHTML=`<video src="${d.videoUrl}" controls style="width:100%;height:100%;object-fit:cover" autoplay loop></video>`;
+      document.getElementById('vid-prev').innerHTML=`
+  <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center">
+    <div style="font-size:32px">✅</div>
+    <div style="font-size:13px;font-weight:500;color:var(--text)">Video Generated!</div>
+    <div style="font-size:11px;color:var(--text2);word-break:break-all">${d.videoUrl.slice(0,60)}...</div>
+    <a href="${d.videoUrl}" target="_blank" style="padding:8px 16px;border-radius:7px;background:var(--accent);color:#fff;font-size:12px;text-decoration:none;font-weight:500">▶️ Watch Video</a>
+  </div>`;
       document.getElementById('vid-actions').style.display='flex';
       document.getElementById('vid-notice').innerHTML='<div class="notice ok">✅ Video generated! Download or post to Facebook.</div>';
     } else {
@@ -896,7 +902,11 @@ async function generateVideo(){
   document.getElementById('vid-btn').textContent='🎬 Generate Video';
 }
 
-function downloadVid(){ if(!currentVidUrl)return; const a=document.createElement('a'); a.href=currentVidUrl; a.download=`postflow-video-${Date.now()}.mp4`; a.click(); }
+function downloadVid(){ 
+  if(!currentVidUrl)return; 
+  // Open in new tab to download (avoids CORS issues with external URLs)
+  window.open(currentVidUrl, '_blank'); 
+}
 
 async function postVideo(){
   if(!currentVidUrl){ alert('Generate a video first!'); return; }
