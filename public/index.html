@@ -995,14 +995,7 @@ async function startVideoGeneration(plan){
 function initVidChat(){
   const msgs = document.getElementById('vid-msgs');
   if(msgs && !msgs.children.length){
-    appendVidMsg('ai', `👋 I'm your AI Video Creator! Tell me what kind of video you want to make.
-
-For example:
-• "Make a feng shui wealth video"
-• "Create 5 tips about luxury real estate"
-• "Make a motivational morning routine reel"
-
-I'll ask a few questions, plan the slides, generate AI images, and render the full video automatically! 🎬`);
+    appendVidMsg('ai', '👋 I am your AI Video Creator! Tell me what kind of video you want to make.\n\nFor example:\n• Make a feng shui wealth video\n• Create 5 tips about luxury real estate\n• Make a motivational morning routine reel\n\nI will ask a few questions, plan the slides, generate AI images, and render the full video automatically! 🎬');
   }
 }
 
