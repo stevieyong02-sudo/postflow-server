@@ -246,6 +246,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     <div class="sb-lbl">Manage</div>
     <button class="sb-item" onclick="ds('sources',this)"><span class="ico">📁</span><span>Sources</span></button>
     <button class="sb-item" onclick="ds('calendar',this)"><span class="ico">📅</span><span>Calendar</span><span class="sb-bdg" id="sc-cnt">0</span></button>
+    <button class="sb-item" onclick="ds('schedule',this)"><span class="ico">🗓️</span><span>Schedule</span></button>
     <button class="sb-item" onclick="ds('published',this)"><span class="ico">✅</span><span>Published Posts</span></button>
     <button class="sb-item" onclick="ds('failed',this)"><span class="ico">⚠️</span><span>Failed Posts</span><span class="sb-bdg red" id="fail-cnt">0</span></button>
     <button class="sb-item" onclick="ds('videos',this)"><span class="ico">🎥</span><span>Videos</span></button>
@@ -392,6 +393,48 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   <div class="ch"><div class="chico">📄</div><div><div class="cht">Extracted Sources</div></div></div>
   <div class="cb"><div id="src-list"><div class="empty"><div class="empty-ico">📭</div>No sources yet</div></div></div>
 </div></div>
+</div>
+</div>
+
+<!-- SCHEDULE -->
+<div class="dsec" id="ds-schedule">
+<div style="max-width:900px">
+
+  <!-- Upload Images -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="ch">
+      <div class="chico" style="background:rgba(108,71,255,.12)">🗓️</div>
+      <div><div class="cht">Schedule Posts</div><div class="chs">Add images + content, pick platform and time</div></div>
+      <button onclick="addScheduleItem()" style="margin-left:auto;padding:6px 14px;border-radius:7px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">+ Add Post</button>
+    </div>
+    <div class="cb">
+      <!-- Upload area -->
+      <div id="sched-upload-area" onclick="document.getElementById('sched-file-input').click()" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+        <div style="font-size:28px;margin-bottom:8px">🖼️</div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:4px">Drop images here or click to upload</div>
+        <div style="font-size:11px;color:var(--text3)">Supports JPG, PNG, WebP — single or bulk upload</div>
+        <input type="file" id="sched-file-input" multiple accept="image/*" style="display:none" onchange="handleSchedImages(this.files)">
+      </div>
+
+      <!-- Schedule items list -->
+      <div id="sched-items" style="display:flex;flex-direction:column;gap:12px"></div>
+
+      <!-- Submit all button -->
+      <div id="sched-submit-row" style="display:none;margin-top:14px">
+        <button onclick="submitAllScheduled()" class="db">🚀 Schedule All Posts</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scheduled queue -->
+  <div class="card">
+    <div class="ch">
+      <div class="chico" style="background:rgba(245,158,11,.1)">⏰</div>
+      <div><div class="cht">Scheduled Queue</div><div class="chs">Posts waiting to be published</div></div>
+      <button onclick="loadSchedQueue()" style="margin-left:auto;font-size:10.5px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--text3);padding:3px 8px;cursor:pointer;font-family:inherit">↻ Refresh</button>
+    </div>
+    <div class="cb" id="sched-queue"><div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div></div>
+  </div>
 </div>
 </div>
 
@@ -649,7 +692,8 @@ function doLogin(){
   document.getElementById('sb-nm').textContent=nm.charAt(0).toUpperCase()+nm.slice(1);
   show('pg-dash'); checkSrv();
 }
-const SMeta={compose:['Create Post','AI-powered content'],images:['Images','Stability AI generation'],inspiration:['Inspiration','Content ideas'],prompts:['Prompts','Claude MCP prompts'],sources:['Sources','Extract & repurpose'],calendar:['Calendar','Content schedule'],published:['Published Posts','Post history'],failed:['Failed Posts','Errors'],videos:['Videos','Video content'],accounts:['Accounts','Social connections'],viral:['Viral AI Coach','Score & improve'],api:['API Dashboard','MCP status'],settings:['Settings','Configuration']};
+const SMeta={compose:['Create Post','AI-powered content'],images:['Images','Stability AI generation'],inspiration:['Inspiration','Content ideas'],prompts:['Prompts','Claude MCP prompts'],sources:['Sources','Extract & repurpose'],calendar:['Calendar','Content schedule'],
+  schedule:['Schedule','Upload images and schedule posts'],published:['Published Posts','Post history'],failed:['Failed Posts','Errors'],videos:['Videos','Video content'],accounts:['Accounts','Social connections'],viral:['Viral AI Coach','Score & improve'],api:['API Dashboard','MCP status'],settings:['Settings','Configuration']};
 function ds(name,btn){
   document.querySelectorAll('.dsec').forEach(s=>s.classList.remove('on'));
   document.querySelectorAll('.sb-item').forEach(b=>b.classList.remove('on'));
@@ -658,6 +702,7 @@ function ds(name,btn){
   const m=SMeta[name]||['PostFlow',''];
   document.getElementById('tb-t').textContent=m[0]; document.getElementById('tb-s').textContent=m[1];
   if(name==='calendar') loadCal();
+  if(name==='schedule') loadSchedQueue();
   if(name==='published') loadPosts('published');
   if(name==='failed') loadPosts('failed');
   if(name==='api') checkSrv();
@@ -910,6 +955,211 @@ async function postVideo(){
     alert(d.success ? 'Posted to ' + acc.name + '! ' + (d.publicUrl||'') : 'Error: ' + d.error);
   }catch(e){ alert('Error: '+e.message); }
 }
+
+// SCHEDULE MODULE
+var schedItems = [];
+var schedItemId = 0;
+
+var PLAT_OPTIONS = [
+  {val:'facebook', label:'Facebook', emoji:'🔵'},
+  {val:'instagram', label:'Instagram', emoji:'📸'},
+  {val:'twitter', label:'Twitter/X', emoji:'🐦'},
+  {val:'linkedin', label:'LinkedIn', emoji:'💼'},
+  {val:'tiktok', label:'TikTok', emoji:'🎵'}
+];
+
+function handleSchedImages(files){
+  if(!files || !files.length) return;
+  for(var i=0; i<files.length; i++){
+    addSchedItemWithFile(files[i]);
+  }
+  document.getElementById('sched-submit-row').style.display = 'block';
+}
+
+function addSchedItemWithFile(file){
+  var id = ++schedItemId;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    schedItems.push({id:id, imageData:e.target.result, file:file, content:'', platform:'facebook', scheduledTime:'', published:false});
+    renderSchedItems();
+  };
+  reader.readAsDataURL(file);
+}
+
+function addScheduleItem(){
+  var id = ++schedItemId;
+  schedItems.push({id:id, imageData:null, file:null, content:'', platform:'facebook', scheduledTime:'', published:false});
+  renderSchedItems();
+  document.getElementById('sched-submit-row').style.display = 'block';
+}
+
+function removeSchedItem(id){
+  schedItems = schedItems.filter(function(i){ return i.id !== id; });
+  if(!schedItems.length) document.getElementById('sched-submit-row').style.display = 'none';
+  renderSchedItems();
+}
+
+function renderSchedItems(){
+  var container = document.getElementById('sched-items');
+  if(!container) return;
+  if(!schedItems.length){
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = schedItems.map(function(item){
+    var now = new Date();
+    now.setHours(now.getHours()+1, 0, 0, 0);
+    var defaultTime = now.toISOString().slice(0,16);
+
+    var platOpts = PLAT_OPTIONS.map(function(p){
+      return '<option value="' + p.val + '"' + (item.platform===p.val?' selected':'') + '>' + p.emoji + ' ' + p.label + '</option>';
+    }).join('');
+
+    var imgHtml = item.imageData
+      ? '<img src="' + item.imageData + '" style="width:100%;height:100%;object-fit:cover;border-radius:6px">'
+      : '<div onclick="triggerImgUpload(' + item.id + ')" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;color:var(--text3)"><div style="font-size:22px">🖼️</div><div style="font-size:10px">Click to add image</div></div>';
+
+    return '<div id="sched-item-' + item.id + '" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--rl);padding:14px;display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start">'
+      + '<div style="position:relative">'
+      + '<div style="width:120px;height:120px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:var(--bg4)">' + imgHtml + '</div>'
+      + '<input type="file" id="img-upload-' + item.id + '" accept="image/*" style="display:none" onchange="updateSchedImage(' + item.id + ',this)">'
+      + (item.imageData ? '<button onclick="triggerImgUpload(' + item.id + ')" style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:9px;padding:3px 6px;border-radius:4px;cursor:pointer">Change</button>' : '')
+      + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px">'
+      + '<div style="display:flex;gap:8px">'
+      + '<select onchange="updateSchedField(' + item.id + ',\'platform\',this.value)" style="height:34px;font-size:12px;flex:1">' + platOpts + '</select>'
+      + '<input type="datetime-local" onchange="updateSchedField(' + item.id + ',\'scheduledTime\',this.value)" value="' + (item.scheduledTime||defaultTime) + '" style="height:34px;font-size:11px;flex:1;font-family:monospace">'
+      + '<button onclick="removeSchedItem(' + item.id + ')" style="width:34px;height:34px;border-radius:6px;background:none;border:1px solid var(--border2);color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0">✕</button>'
+      + '</div>'
+      + '<textarea onchange="updateSchedField(' + item.id + ',\'content\',this.value)" oninput="updateSchedField(' + item.id + ',\'content\',this.value)" placeholder="Write your post content here..." rows="4" style="resize:vertical;font-size:12.5px;line-height:1.6">' + item.content + '</textarea>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center">'
+      + '<span style="font-size:10.5px;color:var(--text3)" id="char-count-' + item.id + '">' + item.content.length + ' chars</span>'
+      + '<button onclick="scheduleOneItem(' + item.id + ')" style="padding:5px 12px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:11px;cursor:pointer;font-family:inherit">Schedule this</button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function triggerImgUpload(id){
+  var el = document.getElementById('img-upload-' + id);
+  if(el) el.click();
+}
+
+function updateSchedImage(id, input){
+  var item = schedItems.find(function(i){ return i.id === id; });
+  if(!item || !input.files[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    item.imageData = e.target.result;
+    item.file = input.files[0];
+    renderSchedItems();
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function updateSchedField(id, field, value){
+  var item = schedItems.find(function(i){ return i.id === id; });
+  if(!item) return;
+  item[field] = value;
+  if(field === 'content'){
+    var cc = document.getElementById('char-count-' + id);
+    if(cc) cc.textContent = value.length + ' chars';
+  }
+}
+
+async function scheduleOneItem(id){
+  var item = schedItems.find(function(i){ return i.id === id; });
+  if(!item) return;
+  if(!item.content){ alert('Please add content for this post.'); return; }
+  if(!item.scheduledTime){ alert('Please set a date and time.'); return; }
+
+  var acc = accounts.find(function(a){ return a.platform === item.platform; });
+  if(!acc){ alert('No ' + item.platform + ' account connected! Go to Accounts tab.'); return; }
+
+  var btn = document.querySelector('#sched-item-' + id + ' button:last-child');
+  if(btn){ btn.textContent = 'Scheduling...'; btn.disabled = true; }
+
+  try{
+    var mediaUrls = [];
+    if(item.imageData){
+      mediaUrls.push(item.imageData);
+    }
+
+    var r = await fetch(SERVER + '/api/post', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        accountId: acc.id,
+        text: item.content,
+        mediaUrls: mediaUrls,
+        platform: item.platform,
+        userId: userId,
+        scheduledTime: new Date(item.scheduledTime).toISOString()
+      })
+    });
+    var d = await r.json();
+
+    if(d.success){
+      item.published = true;
+      if(btn){ btn.textContent = 'Scheduled!'; btn.style.background = 'var(--green)'; }
+      loadSchedQueue();
+    } else {
+      if(btn){ btn.textContent = 'Failed!'; btn.style.background = 'var(--red)'; btn.disabled = false; }
+      alert('Error: ' + d.error);
+    }
+  } catch(e){
+    if(btn){ btn.textContent = 'Error'; btn.disabled = false; }
+    alert('Error: ' + e.message);
+  }
+}
+
+async function submitAllScheduled(){
+  var pending = schedItems.filter(function(i){ return !i.published; });
+  if(!pending.length){ alert('No posts to schedule!'); return; }
+  for(var i=0; i<pending.length; i++){
+    await scheduleOneItem(pending[i].id);
+  }
+}
+
+async function loadSchedQueue(){
+  var el = document.getElementById('sched-queue');
+  if(!el) return;
+  try{
+    var r = await fetch(SERVER + '/api/schedules?userId=' + userId);
+    var d = await r.json();
+    var scheds = d.schedules || [];
+    document.getElementById('sc-cnt').textContent = scheds.length;
+    if(!scheds.length){
+      el.innerHTML = '<div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div>';
+      return;
+    }
+    el.innerHTML = scheds.map(function(s){
+      var dt = new Date(s.scheduledTime);
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px">'
+        + '<div style="font-size:20px">' + (PEMO[s.platform]||'📱') + '</div>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (s.preview||'Scheduled post') + '</div>'
+        + '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">' + s.platform + ' · ' + dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</div>'
+        + '</div>'
+        + '<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);color:var(--amber)">Scheduled</span>'
+        + '<button onclick="deleteSchedPost(\'' + s.id + '\')" style="padding:3px 8px;border-radius:5px;background:none;border:1px solid var(--border2);font-size:10px;color:var(--text3);cursor:pointer;font-family:inherit">Cancel</button>'
+        + '</div>';
+    }).join('');
+  } catch(e){
+    el.innerHTML = '<div class="empty">Server not reachable</div>';
+  }
+}
+
+async function deleteSchedPost(id){
+  if(!confirm('Cancel this scheduled post?')) return;
+  try{
+    await fetch(SERVER + '/api/schedules/' + id, {method:'DELETE'});
+    loadSchedQueue();
+  } catch(e){ alert('Error: ' + e.message); }
+}
+
 </script>
 </body>
 </html>
