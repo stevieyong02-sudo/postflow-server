@@ -396,48 +396,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 </div>
 </div>
 
-<!-- SCHEDULE -->
-<div class="dsec" id="ds-schedule">
-<div style="max-width:900px">
-
-  <!-- Upload Images -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="ch">
-      <div class="chico" style="background:rgba(108,71,255,.12)">🗓️</div>
-      <div><div class="cht">Schedule Posts</div><div class="chs">Add images + content, pick platform and time</div></div>
-      <button onclick="addScheduleItem()" style="margin-left:auto;padding:6px 14px;border-radius:7px;background:var(--accent);border:none;color:#fff;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">+ Add Post</button>
-    </div>
-    <div class="cb">
-      <!-- Upload area -->
-      <label for="sched-file-input" id="sched-upload-area" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px;display:block" ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(108,71,255,.05)'" ondragleave="this.style.borderColor='var(--border2)';this.style.background=''" ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleSchedImages(event.dataTransfer.files)">
-        <div style="font-size:28px;margin-bottom:8px">🖼️</div>
-        <div style="font-size:13px;font-weight:500;margin-bottom:4px">Drop images here or click to upload</div>
-        <div style="font-size:11px;color:var(--text3)">Supports JPG, PNG, WebP — single or bulk</div>
-        <input type="file" id="sched-file-input" multiple accept="image/*" style="display:none" onchange="handleSchedImages(this.files)">
-      </label>
-
-      <!-- Schedule items list -->
-      <div id="sched-items" style="display:flex;flex-direction:column;gap:12px"></div>
-
-      <!-- Submit all button -->
-      <div id="sched-submit-row" style="display:none;margin-top:14px">
-        <button onclick="submitAllScheduled()" class="db">🚀 Schedule All Posts</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Scheduled queue -->
-  <div class="card">
-    <div class="ch">
-      <div class="chico" style="background:rgba(245,158,11,.1)">⏰</div>
-      <div><div class="cht">Scheduled Queue</div><div class="chs">Posts waiting to be published</div></div>
-      <button onclick="loadSchedQueue()" style="margin-left:auto;font-size:10.5px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--text3);padding:3px 8px;cursor:pointer;font-family:inherit">↻ Refresh</button>
-    </div>
-    <div class="cb" id="sched-queue"><div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div></div>
-  </div>
-</div>
-</div>
-
 <!-- CALENDAR -->
 <div class="dsec" id="ds-calendar">
 <div class="card">
@@ -455,6 +413,39 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
       <div style="text-align:center;font-size:10px;font-weight:600;color:var(--text3);padding:4px">SUN</div>
     </div>
     <div class="cal-g" id="cal-g"></div>
+  </div>
+</div>
+</div>
+
+<!-- SCHEDULE -->
+<div class="dsec" id="ds-schedule">
+<div style="max-width:860px">
+  <div class="card" style="margin-bottom:14px">
+    <div class="ch">
+      <div class="chico" style="background:rgba(108,71,255,.12)">🗓️</div>
+      <div><div class="cht">Schedule Posts</div><div class="chs">Upload images, write content, pick time and platform</div></div>
+      <button onclick="addBlankCard()" style="margin-left:auto;padding:6px 14px;border-radius:7px;background:var(--accent);border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Add Post</button>
+    </div>
+    <div class="cb">
+      <label id="sched-drop" for="sched-bulk-input" style="display:block;border:2px dashed var(--border2);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px">
+        <div style="font-size:26px;margin-bottom:6px">🖼️</div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:3px">Drop images here or click to upload</div>
+        <div style="font-size:11px;color:var(--text3)">JPG, PNG, WebP — single or bulk</div>
+        <input type="file" id="sched-bulk-input" multiple accept="image/*" style="display:none" onchange="addImages(this.files)">
+      </label>
+      <div id="sched-list"></div>
+      <div id="sched-all-btn" style="display:none;margin-top:6px">
+        <button onclick="schedAll()" class="db">🚀 Schedule All Posts</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch">
+      <div class="chico" style="background:rgba(245,158,11,.1)">⏰</div>
+      <div><div class="cht">Scheduled Queue</div></div>
+      <button onclick="loadSchedQueue()" style="margin-left:auto;font-size:10.5px;background:none;border:1px solid var(--border);border-radius:5px;color:var(--text3);padding:3px 8px;cursor:pointer;font-family:inherit">↻</button>
+    </div>
+    <div class="cb" id="sched-queue"><div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div></div>
   </div>
 </div>
 </div>
@@ -702,7 +693,7 @@ function ds(name,btn){
   const m=SMeta[name]||['PostFlow',''];
   document.getElementById('tb-t').textContent=m[0]; document.getElementById('tb-s').textContent=m[1];
   if(name==='calendar') loadCal();
-  if(name==='schedule'){ loadSchedQueue(); setTimeout(initSchedule, 300); }
+  if(name==='schedule'){loadSchedQueue();setTimeout(initSchedule,200);}
   if(name==='published') loadPosts('published');
   if(name==='failed') loadPosts('failed');
   if(name==='api') checkSrv();
@@ -956,342 +947,190 @@ async function postVideo(){
   }catch(e){ alert('Error: '+e.message); }
 }
 
-// SCHEDULE MODULE
+var schedItems=[];
+var schedItemId=0;
+var PLAT_OPT=[{v:'facebook',l:'Facebook',e:'🔵'},{v:'instagram',l:'Instagram',e:'📸'},{v:'twitter',l:'Twitter/X',e:'🐦'},{v:'linkedin',l:'LinkedIn',e:'💼'},{v:'tiktok',l:'TikTok',e:'🎵'}];
+
 function initSchedule(){
-  var area = document.getElementById('sched-upload-area');
-  if(!area || area.dataset.init) return;
-  area.dataset.init = '1';
-
-  // Click to upload
-  area.addEventListener('click', function(){
-    document.getElementById('sched-file-input').click();
-  });
-
-  // Drag over
-  area.addEventListener('dragover', function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    area.style.borderColor = 'var(--accent)';
-    area.style.background = 'rgba(108,71,255,.05)';
-  });
-
-  // Drag leave
-  area.addEventListener('dragleave', function(e){
-    e.preventDefault();
-    area.style.borderColor = 'var(--border2)';
-    area.style.background = '';
-  });
-
-  // Drop
-  area.addEventListener('drop', function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    area.style.borderColor = 'var(--border2)';
-    area.style.background = '';
-    var files = e.dataTransfer.files;
-    if(files && files.length){
-      handleSchedImages(files);
-    }
-  });
-}
-var schedItems = [];
-var schedItemId = 0;
-
-var PLAT_OPTIONS = [
-  {val:'facebook', label:'Facebook', emoji:'🔵'},
-  {val:'instagram', label:'Instagram', emoji:'📸'},
-  {val:'twitter', label:'Twitter/X', emoji:'🐦'},
-  {val:'linkedin', label:'LinkedIn', emoji:'💼'},
-  {val:'tiktok', label:'TikTok', emoji:'🎵'}
-];
-
-function handleSchedImages(files){
-  if(!files || !files.length) return;
-  var fileArr = Array.from(files);
-  fileArr.forEach(function(file){
-    addSchedItemWithFile(file);
-  });
-  document.getElementById('sched-submit-row').style.display = 'block';
+  var area=document.getElementById('sched-drop');
+  if(!area||area._init)return;
+  area._init=true;
+  area.addEventListener('dragover',function(e){e.preventDefault();area.style.borderColor='var(--accent)';area.style.background='rgba(108,71,255,.06)';});
+  area.addEventListener('dragleave',function(){area.style.borderColor='var(--border2)';area.style.background='';});
+  area.addEventListener('drop',function(e){e.preventDefault();area.style.borderColor='var(--border2)';area.style.background='';addImages(e.dataTransfer.files);});
 }
 
-function addSchedItemWithFile(file){
-  var id = ++schedItemId;
-  var reader = new FileReader();
-  reader.onload = function(e){
-    schedItems.push({id:id, imageData:e.target.result, file:file, content:'', platform:'facebook', scheduledTime:'', published:false});
-    renderSchedItems();
-  };
-  reader.readAsDataURL(file);
-}
-
-function addScheduleItem(){
-  var id = ++schedItemId;
-  schedItems.push({id:id, imageData:null, file:null, content:'', platform:'facebook', scheduledTime:'', published:false});
-  renderSchedItems();
-  document.getElementById('sched-submit-row').style.display = 'block';
-}
-
-function removeSchedItem(id){
-  schedItems = schedItems.filter(function(i){ return i.id !== id; });
-  if(!schedItems.length) document.getElementById('sched-submit-row').style.display = 'none';
-  renderSchedItems();
-}
-
-function renderSchedItems(){
-  var container = document.getElementById('sched-items');
-  if(!container) return;
-  container.innerHTML = '';
-  if(!schedItems.length) return;
-
-  schedItems.forEach(function(item){
-    var now = new Date();
-    now.setHours(now.getHours()+1, 0, 0, 0);
-    var defaultTime = now.toISOString().slice(0,16);
-
-    // Outer wrapper
-    var wrap = document.createElement('div');
-    wrap.id = 'sched-item-' + item.id;
-    wrap.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:var(--rl);padding:14px;display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start';
-
-    // Left - image area
-    var imgWrap = document.createElement('div');
-    imgWrap.style.position = 'relative';
-
-    var imgBox = document.createElement('div');
-    imgBox.style.cssText = 'width:120px;height:120px;border-radius:8px;border:1px solid var(--border);overflow:hidden;background:var(--bg4);cursor:pointer';
-
-    if(item.imageData){
-      var img = document.createElement('img');
-      img.src = item.imageData;
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-      imgBox.appendChild(img);
-      imgBox.onclick = function(){ document.getElementById('img-upload-' + item.id).click(); };
-    } else {
-      imgBox.style.display = 'flex';
-      imgBox.style.flexDirection = 'column';
-      imgBox.style.alignItems = 'center';
-      imgBox.style.justifyContent = 'center';
-      imgBox.style.gap = '6px';
-      imgBox.innerHTML = '<div style="font-size:22px">🖼️</div><div style="font-size:10px;color:var(--text3)">Click to add</div>';
-      imgBox.onclick = function(){ document.getElementById('img-upload-' + item.id).click(); };
-    }
-
-    var fileInp = document.createElement('input');
-    fileInp.type = 'file';
-    fileInp.id = 'img-upload-' + item.id;
-    fileInp.accept = 'image/*';
-    fileInp.style.display = 'none';
-    fileInp.onchange = function(){ updateSchedImage(item.id, this); };
-
-    imgWrap.appendChild(imgBox);
-    imgWrap.appendChild(fileInp);
-
-    // Right - content area
-    var right = document.createElement('div');
-    right.style.cssText = 'display:flex;flex-direction:column;gap:8px';
-
-    // Top row - platform + datetime + delete
-    var topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;gap:8px;align-items:center';
-
-    var platSel = document.createElement('select');
-    platSel.style.cssText = 'height:34px;font-size:12px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);padding:0 8px';
-    PLAT_OPTIONS.forEach(function(p){
-      var opt = document.createElement('option');
-      opt.value = p.val;
-      opt.textContent = p.emoji + ' ' + p.label;
-      if(item.platform === p.val) opt.selected = true;
-      platSel.appendChild(opt);
-    });
-    platSel.onchange = function(){ updateSchedField(item.id, 'platform', this.value); };
-
-    var dtInp = document.createElement('input');
-    dtInp.type = 'datetime-local';
-    dtInp.value = item.scheduledTime || defaultTime;
-    dtInp.style.cssText = 'height:34px;font-size:11px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);padding:0 8px;font-family:monospace';
-    dtInp.onchange = function(){ updateSchedField(item.id, 'scheduledTime', this.value); };
-
-    var delBtn = document.createElement('button');
-    delBtn.textContent = '✕';
-    delBtn.style.cssText = 'width:34px;height:34px;border-radius:6px;background:none;border:1px solid var(--border2);color:var(--red);cursor:pointer;font-size:14px;flex-shrink:0';
-    delBtn.onclick = function(){ removeSchedItem(item.id); };
-
-    topRow.appendChild(platSel);
-    topRow.appendChild(dtInp);
-    topRow.appendChild(delBtn);
-
-    // Textarea
-    var ta = document.createElement('textarea');
-    ta.placeholder = 'Write your post content here...';
-    ta.rows = 4;
-    ta.value = item.content;
-    ta.style.cssText = 'resize:vertical;font-size:12.5px;line-height:1.6;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:inherit;padding:9px 11px;outline:none;width:100%';
-    ta.oninput = function(){ 
-      updateSchedField(item.id, 'content', this.value);
-      var cc = document.getElementById('char-' + item.id);
-      if(cc) cc.textContent = this.value.length + ' chars';
+function addImages(files){
+  if(!files||!files.length)return;
+  Array.from(files).forEach(function(f){
+    var id=++schedItemId;
+    var fr=new FileReader();
+    fr.onload=function(e){
+      schedItems.push({id:id,img:e.target.result,content:'',platform:'facebook',time:'',sent:false});
+      renderCard(id);
+      document.getElementById('sched-all-btn').style.display='block';
     };
-
-    // Bottom row
-    var botRow = document.createElement('div');
-    botRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
-
-    var charCount = document.createElement('span');
-    charCount.id = 'char-' + item.id;
-    charCount.style.cssText = 'font-size:10.5px;color:var(--text3)';
-    charCount.textContent = item.content.length + ' chars';
-
-    var schedBtn = document.createElement('button');
-    schedBtn.id = 'sched-btn-' + item.id;
-    schedBtn.textContent = 'Schedule this';
-    schedBtn.style.cssText = 'padding:6px 14px;border-radius:6px;background:var(--accent);border:none;color:#fff;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:600';
-    schedBtn.onclick = function(){ scheduleOneItem(item.id); };
-
-    botRow.appendChild(charCount);
-    botRow.appendChild(schedBtn);
-
-    right.appendChild(topRow);
-    right.appendChild(ta);
-    right.appendChild(botRow);
-
-    wrap.appendChild(imgWrap);
-    wrap.appendChild(right);
-    container.appendChild(wrap);
+    fr.readAsDataURL(f);
   });
 }
 
-function triggerImgUpload(id){
-  var el = document.getElementById('img-upload-' + id);
-  if(el) el.click();
-}
+function renderCard(id){
+  var item=schedItems.find(function(x){return x.id===id;});
+  if(!item)return;
+  var list=document.getElementById('sched-list');
+  if(!list)return;
 
-function updateSchedImage(id, input){
-  var item = schedItems.find(function(i){ return i.id === id; });
-  if(!item || !input.files[0]) return;
-  var reader = new FileReader();
-  reader.onload = function(e){
-    item.imageData = e.target.result;
-    item.file = input.files[0];
-    // Update thumbnail in place - no full re-render
-    var imgBox = document.querySelector('#sched-item-' + id + ' div');
-    if(imgBox){
-      imgBox.innerHTML = '';
-      var img = document.createElement('img');
-      img.src = e.target.result;
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:6px';
-      imgBox.appendChild(img);
-      imgBox.onclick = function(){ document.getElementById('img-upload-' + id).click(); };
-    }
+  var now=new Date();now.setHours(now.getHours()+1,0,0,0);
+  var dt=now.toISOString().slice(0,16);
+
+  var card=document.createElement('div');
+  card.id='sc-'+id;
+  card.style.cssText='background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:14px;margin-bottom:10px';
+
+  var thumb=document.createElement('div');
+  thumb.id='sc-thumb-'+id;
+  thumb.style.cssText='width:110px;height:110px;border-radius:8px;overflow:hidden;flex-shrink:0;background:var(--bg4);cursor:pointer;border:1px solid var(--border)';
+  var timg=document.createElement('img');
+  timg.src=item.img;
+  timg.style.cssText='width:100%;height:100%;object-fit:cover';
+  thumb.appendChild(timg);
+  thumb.onclick=function(){document.getElementById('sc-file-'+id).click();};
+
+  var fi=document.createElement('input');
+  fi.type='file';fi.id='sc-file-'+id;fi.accept='image/*';fi.style.display='none';
+  fi.onchange=function(){
+    if(!this.files[0])return;
+    var r=new FileReader();
+    r.onload=function(e){
+      item.img=e.target.result;
+      timg.src=e.target.result;
+    };
+    r.readAsDataURL(this.files[0]);
   };
-  reader.readAsDataURL(input.files[0]);
+
+  var right=document.createElement('div');
+  right.style.cssText='flex:1;display:flex;flex-direction:column;gap:8px;min-width:0';
+
+  var row1=document.createElement('div');
+  row1.style.cssText='display:flex;gap:8px';
+
+  var sel=document.createElement('select');
+  sel.style.cssText='height:34px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:12px;padding:0 8px';
+  PLAT_OPT.forEach(function(p){var o=document.createElement('option');o.value=p.v;o.textContent=p.e+' '+p.l;sel.appendChild(o);});
+  sel.value=item.platform;
+  sel.onchange=function(){item.platform=this.value;};
+
+  var dti=document.createElement('input');
+  dti.type='datetime-local';dti.value=dt;
+  dti.style.cssText='height:34px;flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:monospace;font-size:11px;padding:0 8px';
+  dti.onchange=function(){item.time=this.value;};
+
+  var del=document.createElement('button');
+  del.textContent='✕';
+  del.style.cssText='width:34px;height:34px;border-radius:8px;background:none;border:1px solid var(--border2);color:var(--red);cursor:pointer;font-size:13px;flex-shrink:0';
+  del.onclick=function(){
+    schedItems=schedItems.filter(function(x){return x.id!==id;});
+    card.remove();
+    if(!schedItems.length)document.getElementById('sched-all-btn').style.display='none';
+  };
+
+  row1.appendChild(sel);row1.appendChild(dti);row1.appendChild(del);
+
+  var ta=document.createElement('textarea');
+  ta.placeholder='Write your post content here...';ta.rows=3;
+  ta.style.cssText='width:100%;resize:vertical;background:var(--bg4);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:12.5px;padding:9px 11px;outline:none;line-height:1.6';
+  ta.oninput=function(){item.content=this.value;document.getElementById('sc-cc-'+id).textContent=this.value.length+' chars';};
+
+  var row2=document.createElement('div');
+  row2.style.cssText='display:flex;justify-content:space-between;align-items:center';
+
+  var cc=document.createElement('span');
+  cc.id='sc-cc-'+id;cc.style.cssText='font-size:10px;color:var(--text3)';cc.textContent='0 chars';
+
+  var btn=document.createElement('button');
+  btn.id='sc-btn-'+id;btn.textContent='Schedule this';
+  btn.style.cssText='padding:6px 14px;border-radius:7px;background:var(--accent);border:none;color:#fff;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit';
+  btn.onclick=function(){schedOne(id);};
+
+  row2.appendChild(cc);row2.appendChild(btn);
+  right.appendChild(row1);right.appendChild(ta);right.appendChild(row2);
+  card.appendChild(thumb);card.appendChild(fi);card.appendChild(right);
+  list.appendChild(card);
 }
 
-function updateSchedField(id, field, value){
-  var item = schedItems.find(function(i){ return i.id === id; });
-  if(!item) return;
-  item[field] = value;
-  if(field === 'content'){
-    var cc = document.getElementById('char-count-' + id);
-    if(cc) cc.textContent = value.length + ' chars';
-  }
+function addBlankCard(){
+  var id=++schedItemId;
+  schedItems.push({id:id,img:null,content:'',platform:'facebook',time:'',sent:false});
+  renderCard(id);
+  document.getElementById('sched-all-btn').style.display='block';
 }
 
-async function scheduleOneItem(id){
-  var item = schedItems.find(function(i){ return i.id === id; });
-  if(!item) return;
-  if(!item.content){ alert('Please add content for this post.'); return; }
-  if(!item.scheduledTime){ alert('Please set a date and time.'); return; }
-
-  var acc = accounts.find(function(a){ return a.platform === item.platform; });
-  if(!acc){ alert('No ' + item.platform + ' account connected! Go to Accounts tab.'); return; }
-
-  var btn = document.querySelector('#sched-item-' + id + ' button:last-child');
-  if(btn){ btn.textContent = 'Scheduling...'; btn.disabled = true; }
-
+async function schedOne(id){
+  var item=schedItems.find(function(x){return x.id===id;});
+  if(!item)return;
+  if(!item.content){alert('Please add content!');return;}
+  var acc=accounts.find(function(a){return a.platform===item.platform;});
+  if(!acc){alert('No '+item.platform+' account connected! Go to Accounts tab.');return;}
+  var btn=document.getElementById('sc-btn-'+id);
+  if(btn){btn.textContent='Scheduling...';btn.disabled=true;}
   try{
-    var mediaUrls = [];
-    if(item.imageData){
-      mediaUrls.push(item.imageData);
-    }
-
-    var r = await fetch(SERVER + '/api/post', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        accountId: acc.id,
-        text: item.content,
-        mediaUrls: mediaUrls,
-        platform: item.platform,
-        userId: userId,
-        scheduledTime: new Date(item.scheduledTime).toISOString()
-      })
-    });
-    var d = await r.json();
-
+    var body={accountId:acc.id,text:item.content,platform:item.platform,userId:userId};
+    if(item.time)body.scheduledTime=new Date(item.time).toISOString();
+    if(item.img)body.mediaUrls=[item.img];
+    var r=await fetch(SERVER+'/api/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
     if(d.success){
-      item.published = true;
-      if(btn){ btn.textContent = 'Scheduled!'; btn.style.background = 'var(--green)'; }
+      item.sent=true;
+      if(btn){btn.textContent='Scheduled!';btn.style.background='var(--green)';btn.disabled=true;}
       loadSchedQueue();
     } else {
-      if(btn){ btn.textContent = 'Failed!'; btn.style.background = 'var(--red)'; btn.disabled = false; }
-      alert('Error: ' + d.error);
+      if(btn){btn.textContent='Failed';btn.style.background='var(--red)';btn.disabled=false;}
+      alert('Error: '+d.error);
     }
-  } catch(e){
-    if(btn){ btn.textContent = 'Error'; btn.disabled = false; }
-    alert('Error: ' + e.message);
+  }catch(e){
+    if(btn){btn.textContent='Retry';btn.disabled=false;}
+    alert('Error: '+e.message);
   }
 }
 
-async async function submitAllScheduled(){
-  var pending = schedItems.filter(function(i){ return !i.published; });
-  if(!pending.length){ alert('No posts to schedule!'); return; }
-  var btn = document.querySelector('[onclick="submitAllScheduled()"]');
-  if(btn){ btn.textContent = 'Scheduling...'; btn.disabled = true; }
-  var ok = 0;
-  for(var i=0; i<pending.length; i++){
-    await scheduleOneItem(pending[i].id);
-    ok++;
-  }
-  if(btn){ btn.textContent = 'Schedule All Posts'; btn.disabled = false; }
-  alert('Scheduled ' + ok + ' posts!');
+async function schedAll(){
+  var pending=schedItems.filter(function(x){return !x.sent;});
+  if(!pending.length){alert('No posts to schedule!');return;}
+  var allBtn=document.getElementById('sched-all-btn');
+  if(allBtn){allBtn.textContent='Scheduling...';allBtn.disabled=true;}
+  for(var i=0;i<pending.length;i++){await schedOne(pending[i].id);}
+  if(allBtn){allBtn.textContent='Schedule All Posts';allBtn.disabled=false;}
   loadSchedQueue();
 }
 
 async function loadSchedQueue(){
-  var el = document.getElementById('sched-queue');
-  if(!el) return;
+  var el=document.getElementById('sched-queue');
+  if(!el)return;
   try{
-    var r = await fetch(SERVER + '/api/schedules?userId=' + userId);
-    var d = await r.json();
-    var scheds = d.schedules || [];
-    document.getElementById('sc-cnt').textContent = scheds.length;
-    if(!scheds.length){
-      el.innerHTML = '<div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div>';
-      return;
-    }
-    el.innerHTML = scheds.map(function(s){
-      var dt = new Date(s.scheduledTime);
-      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px">'
-        + '<div style="font-size:20px">' + (PEMO[s.platform]||'📱') + '</div>'
-        + '<div style="flex:1;min-width:0">'
-        + '<div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (s.preview||'Scheduled post') + '</div>'
-        + '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">' + s.platform + ' · ' + dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</div>'
-        + '</div>'
-        + '<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);color:var(--amber)">Scheduled</span>'
-        + '<button onclick="deleteSchedPost(\'' + s.id + '\')" style="padding:3px 8px;border-radius:5px;background:none;border:1px solid var(--border2);font-size:10px;color:var(--text3);cursor:pointer;font-family:inherit">Cancel</button>'
-        + '</div>';
-    }).join('');
-  } catch(e){
-    el.innerHTML = '<div class="empty">Server not reachable</div>';
-  }
+    var r=await fetch(SERVER+'/api/schedules?userId='+userId);
+    var d=await r.json();
+    var list=d.schedules||[];
+    document.getElementById('sc-cnt').textContent=list.length;
+    if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ico">📭</div>No scheduled posts yet</div>';return;}
+    el.innerHTML='';
+    list.forEach(function(s){
+      var dt=new Date(s.scheduledTime);
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px';
+      row.innerHTML='<div style="font-size:20px">'+(s.platform==='facebook'?'🔵':s.platform==='instagram'?'📸':'📱')+'</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(s.preview||'Scheduled post')+'</div>'
+        +'<div style="font-size:10.5px;color:var(--text3);margin-top:2px">'+s.platform+' · '+dt.toLocaleDateString()+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'</div></div>'
+        +'<span style="font-size:10px;padding:3px 8px;border-radius:4px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);color:var(--amber)">Scheduled</span>'
+        +'<button onclick="cancelSched(\''+s.id+'\')" style="padding:3px 8px;border-radius:5px;background:none;border:1px solid var(--border2);font-size:10px;color:var(--text3);cursor:pointer;font-family:inherit">Cancel</button>';
+      el.appendChild(row);
+    });
+  }catch(e){el.innerHTML='<div class="empty">Could not load queue</div>';}
 }
 
-async function deleteSchedPost(id){
-  if(!confirm('Cancel this scheduled post?')) return;
-  try{
-    await fetch(SERVER + '/api/schedules/' + id, {method:'DELETE'});
-    loadSchedQueue();
-  } catch(e){ alert('Error: ' + e.message); }
+async function cancelSched(id){
+  if(!confirm('Cancel this scheduled post?'))return;
+  try{await fetch(SERVER+'/api/schedules/'+id,{method:'DELETE'});loadSchedQueue();}
+  catch(e){alert('Error: '+e.message);}
 }
 
 </script>
