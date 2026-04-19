@@ -409,12 +409,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
     </div>
     <div class="cb">
       <!-- Upload area -->
-      <div id="sched-upload-area" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px">
+      <label for="sched-file-input" id="sched-upload-area" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px;display:block" ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(108,71,255,.05)'" ondragleave="this.style.borderColor='var(--border2)';this.style.background=''" ondrop="event.preventDefault();this.style.borderColor='var(--border2)';this.style.background='';handleSchedImages(event.dataTransfer.files)">
         <div style="font-size:28px;margin-bottom:8px">🖼️</div>
         <div style="font-size:13px;font-weight:500;margin-bottom:4px">Drop images here or click to upload</div>
-        <div style="font-size:11px;color:var(--text3)">Supports JPG, PNG, WebP — single or bulk upload</div>
+        <div style="font-size:11px;color:var(--text3)">Supports JPG, PNG, WebP — single or bulk</div>
         <input type="file" id="sched-file-input" multiple accept="image/*" style="display:none" onchange="handleSchedImages(this.files)">
-      </div>
+      </label>
 
       <!-- Schedule items list -->
       <div id="sched-items" style="display:flex;flex-direction:column;gap:12px"></div>
@@ -702,7 +702,7 @@ function ds(name,btn){
   const m=SMeta[name]||['PostFlow',''];
   document.getElementById('tb-t').textContent=m[0]; document.getElementById('tb-s').textContent=m[1];
   if(name==='calendar') loadCal();
-  if(name==='schedule'){ loadSchedQueue(); setTimeout(initSchedule, 100); }
+  if(name==='schedule'){ loadSchedQueue(); setTimeout(initSchedule, 300); }
   if(name==='published') loadPosts('published');
   if(name==='failed') loadPosts('failed');
   if(name==='api') checkSrv();
