@@ -323,19 +323,19 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 <div class="grid2">
 <div>
   <div class="card">
-    <div class="ch"><div class="chico" style="background:rgba(167,139,250,.1)">🎨</div><div><div class="cht">Generate Image</div><div class="chs">Powered by Stability AI</div></div></div>
+    <div class="ch"><div class="chico" style="background:rgba(167,139,250,.1)">🎨</div><div><div class="cht">Generate Image</div><div class="chs">Powered by Recraft v3 (Replicate)</div></div></div>
     <div class="cb">
       <div class="fg"><label class="flbl">Image prompt</label><textarea id="img-prompt" rows="3" placeholder="e.g. Modern living room with air purifier, clean aesthetic, natural light, lifestyle photography..."></textarea></div>
       <div class="fg"><label class="flbl">Style</label>
         <div class="style-g">
-          <button class="style-b on" onclick="selStyle(this)" data-s="photographic">📷 Photo</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="digital-art">🎨 Digital Art</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="cinematic">🎬 Cinematic</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="anime">✨ Anime</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="3d-model">🧊 3D</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="neon-punk">💜 Neon</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="origami">📄 Origami</button>
-          <button class="style-b" onclick="selStyle(this)" data-s="comic-book">💥 Comic</button>
+          <button class="style-b on" onclick="selStyle(this)" data-s="realistic_image">📷 Realistic</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="digital_illustration">🎨 Illustration</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="digital_illustration/pixel_art">🎮 Pixel Art</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="digital_illustration/anime">✨ Anime</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="realistic_image/studio_portrait">🎬 Portrait</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="realistic_image/hard_flash">💡 Hard Flash</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="digital_illustration/hand_drawn">✏️ Hand Drawn</button>
+          <button class="style-b" onclick="selStyle(this)" data-s="digital_illustration/watercolor">💧 Watercolor</button>
         </div>
       </div>
       <div class="fg"><label class="flbl">Size</label>
@@ -444,8 +444,42 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 
 <!-- VIDEOS -->
 <div class="dsec" id="ds-videos">
-<div class="notice info">🎥 Video posting coming soon!</div>
-<div class="card"><div class="cb"><div class="empty"><div class="empty-ico">🎬</div>Video generation & posting coming soon</div></div></div>
+<div class="grid2">
+<div>
+  <div class="card">
+    <div class="ch"><div class="chico" style="background:rgba(239,68,68,.1)">🎬</div><div><div class="cht">Generate Video</div><div class="chs">Recraft v3 images + Framepack animation</div></div></div>
+    <div class="cb">
+      <div class="notice info">🎬 Same pipeline as Blotato — Recraft v3 for images, fal.ai Framepack for animation</div>
+      <div class="fg"><label class="flbl">Video topic / script</label><textarea id="vid-topic" rows="3" placeholder="e.g. 3 feng shui tips for wealth and abundance..."></textarea></div>
+      <div class="fg"><label class="flbl">Number of slides</label>
+        <select id="vid-slides"><option value="3">3 slides</option><option value="5" selected>5 slides</option><option value="7">7 slides</option></select>
+      </div>
+      <div class="fg"><label class="flbl">Motion style</label>
+        <select id="vid-motion">
+          <option value="smooth cinematic pan, high quality">Cinematic pan</option>
+          <option value="slow zoom in, dreamy atmosphere">Slow zoom</option>
+          <option value="gentle floating motion, peaceful">Floating</option>
+          <option value="dynamic motion, energetic">Dynamic</option>
+        </select>
+      </div>
+      <button class="db" id="vid-btn" onclick="generateVideo()">🎬 Generate Video</button>
+      <div id="vid-notice" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+<div>
+  <div class="card">
+    <div class="ch"><div class="chico" style="background:rgba(34,197,94,.1)">▶️</div><div><div class="cht">Generated Video</div></div></div>
+    <div class="cb">
+      <div id="vid-prev" style="width:100%;aspect-ratio:9/16;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);margin-bottom:10px;overflow:hidden">Your video will appear here</div>
+      <div id="vid-actions" style="display:none;flex-direction:column;gap:8px">
+        <button onclick="downloadVid()" style="width:100%;padding:9px;border-radius:7px;background:none;border:1px solid var(--border2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit">⬇️ Download Video</button>
+        <button onclick="postVideo()" class="db">📤 Post to Facebook</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
 </div>
 
 <!-- ACCOUNTS -->
@@ -697,7 +731,7 @@ async function generateImage(){
   document.getElementById('img-notice').innerHTML='';
   const [w,h]=document.getElementById('img-size').value.split('x').map(Number);
   try{
-    const r=await fetch(`${SERVER}/api/generate-image`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,style:imgStyle,width:w,height:h})});
+    const r=await fetch(`${SERVER}/api/generate-image-recraft`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,style:imgStyle,width:w,height:h})});
     const d=await r.json();
     if(d.success){
       currentImgUrl=d.url;
@@ -819,6 +853,64 @@ function saveConn(){
 }
 function finishConn(){ closeM('m-succ'); ds('accounts',null); }
 window.onclick=e=>['m-pages','m-perms','m-succ'].forEach(id=>{ const el=document.getElementById(id); if(e.target===el)el.classList.remove('on'); });
+
+// ══════ VIDEO GENERATION ══════
+let currentVidUrl = null;
+
+async function generateVideo(){
+  const topic = document.getElementById('vid-topic').value.trim();
+  if(!topic){ document.getElementById('vid-topic').focus(); return; }
+  const numSlides = parseInt(document.getElementById('vid-slides').value);
+  const motion = document.getElementById('vid-motion').value;
+  
+  document.getElementById('vid-btn').disabled=true;
+  document.getElementById('vid-btn').textContent='⏳ Generating… (3-5 min)';
+  document.getElementById('vid-notice').innerHTML='<div class="notice info">🎬 Step 1: Generating images with Recraft v3…<br>⏳ This takes 3-5 minutes. Please wait!</div>';
+  document.getElementById('vid-prev').innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px"><div class="spinner"></div><div style="font-size:12px;color:var(--text2);text-align:center">Generating ' + numSlides + ' images<br>then animating into video…</div></div>';
+
+  // Build slides from topic
+  const slides = [];
+  for(let i=1; i<=numSlides; i++){
+    slides.push({ text: `${topic} - point ${i}`, imagePrompt: `${topic}, slide ${i}, cinematic, high quality, 9:16 vertical` });
+  }
+
+  try{
+    const r = await fetch(`${SERVER}/api/generate-slideshow`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ slides, prompt: motion, duration: 5 })
+    });
+    const d = await r.json();
+    if(d.success){
+      currentVidUrl = d.videoUrl;
+      document.getElementById('vid-prev').innerHTML=`<video src="${d.videoUrl}" controls style="width:100%;height:100%;object-fit:cover" autoplay loop></video>`;
+      document.getElementById('vid-actions').style.display='flex';
+      document.getElementById('vid-notice').innerHTML='<div class="notice ok">✅ Video generated! Download or post to Facebook.</div>';
+    } else {
+      document.getElementById('vid-prev').innerHTML='<span style="color:var(--red)">Generation failed</span>';
+      document.getElementById('vid-notice').innerHTML=`<div class="notice err">❌ ${d.error}</div>`;
+    }
+  }catch(e){
+    document.getElementById('vid-notice').innerHTML=`<div class="notice err">❌ ${e.message}</div>`;
+  }
+  document.getElementById('vid-btn').disabled=false;
+  document.getElementById('vid-btn').textContent='🎬 Generate Video';
+}
+
+function downloadVid(){ if(!currentVidUrl)return; const a=document.createElement('a'); a.href=currentVidUrl; a.download=`postflow-video-${Date.now()}.mp4`; a.click(); }
+
+async function postVideo(){
+  if(!currentVidUrl){ alert('Generate a video first!'); return; }
+  const acc = accounts.find(a=>a.platform==='facebook');
+  if(!acc){ alert('Connect a Facebook account first! Go to Accounts tab.'); return; }
+  const caption = prompt('Enter caption for this video post:', '✨ Watch this! #PostFlow #AI');
+  if(!caption) return;
+  try{
+    const r = await fetch(`${SERVER}/api/post`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc.id,text:caption,mediaUrls:[currentVidUrl],platform:'facebook',userId,mediaType:'reel'})});
+    const d = await r.json();
+    alert(d.success?`✅ Posted video to ${acc.name}!
+${d.publicUrl||''}`:`❌ ${d.error}`);
+  }catch(e){ alert('Error: '+e.message); }
+}
 </script>
 </body>
 </html>
