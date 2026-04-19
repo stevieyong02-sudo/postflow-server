@@ -67,6 +67,25 @@ app.use(session({
 app.use(express.static("public"));
 
 // ─── Health ───────────────────────────────────────────────────────────────────
+// Debug endpoint - test fal.ai directly
+app.get("/debug/fal", async (req, res) => {
+  if (!FAL_API_KEY) return res.json({ error: "FAL_API_KEY not set" });
+  try {
+    // Submit a minimal test request
+    const submitRes = await fetch("https://queue.fal.run/fal-ai/framepack", {
+      method: "POST",
+      headers: { "Authorization": `Key ${FAL_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        image_url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=768",
+        prompt: "gentle motion",
+        num_frames: 16
+      }),
+    });
+    const submitData = await submitRes.json();
+    res.json({ submitted: submitData });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 app.get("/health", (_, res) => res.json({
   status: "ok",
   server: "PostFlow v1.0.0",
@@ -445,14 +464,19 @@ app.post("/api/generate-video", async (req, res) => {
         headers: { "Authorization": `Key ${FAL_API_KEY}` },
       });
       const pollData = await pollRes.json();
-      if (pollData.status === "FAILED") throw new Error(pollData.error || "Video generation failed");
-      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) {
-        videoUrl = pollData.output.video.url;
+      console.log(`[fal.ai single poll ${attempts}] status:`, pollData.status, JSON.stringify(pollData).slice(0,200));
+      if (pollData.status === "FAILED") throw new Error(JSON.stringify(pollData.error) || "Video generation failed");
+      if (pollData.status === "COMPLETED") {
+        videoUrl = pollData.output?.video?.url 
+          || pollData.output?.video_url
+          || pollData.output?.url
+          || (Array.isArray(pollData.output) ? pollData.output[0] : null)
+          || null;
       }
       attempts++;
     }
 
-    if (!videoUrl) throw new Error("Video generation timed out");
+    if (!videoUrl) throw new Error("Video generation timed out or no URL in response");
     const videoId = makeId("vid");
     videoStore[videoId] = { id: videoId, url: videoUrl, imageUrl, prompt, createdAt: now() };
     res.json({ success: true, videoId, url: videoUrl, prompt });
@@ -508,8 +532,21 @@ app.post("/api/generate-slideshow", async (req, res) => {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(`https://queue.fal.run/fal-ai/framepack/requests/${requestId}`, { headers: { "Authorization": `Key ${FAL_API_KEY}` } });
       const pollData = await pollRes.json();
-      if (pollData.status === "COMPLETED" && pollData.output?.video?.url) videoUrl = pollData.output.video.url;
-      if (pollData.status === "FAILED") throw new Error("Video failed");
+      console.log(`[fal.ai poll ${attempts}] status:`, pollData.status, JSON.stringify(pollData).slice(0, 200));
+      if (pollData.status === "FAILED") throw new Error(JSON.stringify(pollData.error) || "Video failed");
+      // Try all possible output paths
+      if (pollData.status === "COMPLETED") {
+        videoUrl = pollData.output?.video?.url 
+          || pollData.output?.video_url
+          || pollData.output?.url
+          || (Array.isArray(pollData.output) ? pollData.output[0] : null)
+          || pollData.video?.url
+          || null;
+        if (!videoUrl) {
+          console.log("[fal.ai] COMPLETED but no video URL found. Full output:", JSON.stringify(pollData.output));
+          throw new Error("Video completed but no URL found in response: " + JSON.stringify(pollData.output));
+        }
+      }
       attempts++;
     }
 
