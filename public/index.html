@@ -427,12 +427,17 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
       <button onclick="addBlankCard()" style="margin-left:auto;padding:6px 14px;border-radius:7px;background:var(--accent);border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Add Post</button>
     </div>
     <div class="cb">
-      <label id="sched-drop" for="sched-bulk-input" style="display:block;border:2px dashed var(--border2);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px">
+      <div id="sched-drop"
+        ondragover="event.preventDefault();event.stopPropagation();this.style.borderColor='var(--accent)';this.style.background='rgba(108,71,255,.07)'"
+        ondragleave="event.stopPropagation();this.style.borderColor='var(--border2)';this.style.background=''"
+        ondrop="event.preventDefault();event.stopPropagation();this.style.borderColor='var(--border2)';this.style.background='';addImages(event.dataTransfer.files)"
+        onclick="document.getElementById('sched-bulk-input').click()"
+        style="border:2px dashed var(--border2);border-radius:var(--r);padding:22px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:14px">
         <div style="font-size:26px;margin-bottom:6px">🖼️</div>
         <div style="font-size:13px;font-weight:500;margin-bottom:3px">Drop images here or click to upload</div>
         <div style="font-size:11px;color:var(--text3)">JPG, PNG, WebP — single or bulk</div>
         <input type="file" id="sched-bulk-input" multiple accept="image/*" style="display:none" onchange="addImages(this.files)">
-      </label>
+      </div>
       <div id="sched-list"></div>
       <div id="sched-all-btn" style="display:none;margin-top:6px">
         <button onclick="schedAll()" class="db">🚀 Schedule All Posts</button>
@@ -693,7 +698,7 @@ function ds(name,btn){
   const m=SMeta[name]||['PostFlow',''];
   document.getElementById('tb-t').textContent=m[0]; document.getElementById('tb-s').textContent=m[1];
   if(name==='calendar') loadCal();
-  if(name==='schedule'){loadSchedQueue();setTimeout(initSchedule,200);}
+  if(name==='schedule'){loadSchedQueue();}
   if(name==='published') loadPosts('published');
   if(name==='failed') loadPosts('failed');
   if(name==='api') checkSrv();
