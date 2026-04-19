@@ -55,7 +55,6 @@ const {
   CLAUDE_API_KEY    = "",
   REPLICATE_API_KEY = "",
   FAL_API_KEY       = "",
-  CLAUDE_API_KEY    = "",
 } = process.env;
 
 const FB_API         = "https://graph.facebook.com/v22.0";
