@@ -1007,9 +1007,10 @@ var PLAT_OPTIONS = [
 
 function handleSchedImages(files){
   if(!files || !files.length) return;
-  for(var i=0; i<files.length; i++){
-    addSchedItemWithFile(files[i]);
-  }
+  var fileArr = Array.from(files);
+  fileArr.forEach(function(file){
+    addSchedItemWithFile(file);
+  });
   document.getElementById('sched-submit-row').style.display = 'block';
 }
 
@@ -1171,7 +1172,16 @@ function updateSchedImage(id, input){
   reader.onload = function(e){
     item.imageData = e.target.result;
     item.file = input.files[0];
-    renderSchedItems();
+    // Update thumbnail in place - no full re-render
+    var imgBox = document.querySelector('#sched-item-' + id + ' div');
+    if(imgBox){
+      imgBox.innerHTML = '';
+      var img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:6px';
+      imgBox.appendChild(img);
+      imgBox.onclick = function(){ document.getElementById('img-upload-' + id).click(); };
+    }
   };
   reader.readAsDataURL(input.files[0]);
 }
@@ -1232,12 +1242,19 @@ async function scheduleOneItem(id){
   }
 }
 
-async function submitAllScheduled(){
+async async function submitAllScheduled(){
   var pending = schedItems.filter(function(i){ return !i.published; });
   if(!pending.length){ alert('No posts to schedule!'); return; }
+  var btn = document.querySelector('[onclick="submitAllScheduled()"]');
+  if(btn){ btn.textContent = 'Scheduling...'; btn.disabled = true; }
+  var ok = 0;
   for(var i=0; i<pending.length; i++){
     await scheduleOneItem(pending[i].id);
+    ok++;
   }
+  if(btn){ btn.textContent = 'Schedule All Posts'; btn.disabled = false; }
+  alert('Scheduled ' + ok + ' posts!');
+  loadSchedQueue();
 }
 
 async function loadSchedQueue(){
