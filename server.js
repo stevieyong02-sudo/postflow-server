@@ -24,6 +24,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
+import { renderVideo } from "./src/renderer.js";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const {
@@ -400,6 +405,60 @@ app.post("/api/viral-coach", async (req, res) => {
   } catch (err) {
     res.json({ success: false, error: err.message });
   }
+});
+
+// ─── Serve rendered videos ───────────────────────────────────────────────────
+app.use('/videos', (req, res, next) => {
+  const filePath = path.join(__dirname, 'public', 'videos', req.path);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    next();
+  }
+});
+
+// ─── PostFlow Video Renderer (Remotion) ──────────────────────────────────────
+app.post("/api/render-video", async (req, res) => {
+  const { slides, topic } = req.body;
+  if (!slides && !topic) return res.status(400).json({ error: "slides or topic required" });
+
+  // Build slides from topic if not provided
+  const videoSlides = slides || [
+    { type: 'hook', label: '✦ AI CONTENT ✦', title: topic, subtitle: 'Watch & Learn' },
+    { type: 'tip', number: '01', headline: 'Key Insight', body: `${topic} - important point 1`, direction: 'right' },
+    { type: 'tip', number: '02', headline: 'Main Takeaway', body: `${topic} - important point 2`, direction: 'left' },
+    { type: 'tip', number: '03', headline: 'Action Step', body: `${topic} - take action now`, direction: 'scale' },
+    { type: 'cta', headline: 'Start Today', subtitle: 'Transform Your Life.', cta: 'Save & Share' },
+  ];
+
+  const videoId = `vid_${Date.now()}`;
+  renderQueue[videoId] = { status: 'rendering', startedAt: now() };
+  
+  res.json({ success: true, videoId, status: 'rendering', message: 'Rendering started!' });
+  
+  // Render async in background
+  renderVideo({ slides: videoSlides, outputFilename: videoId }).then(result => {
+    if(result.success) {
+      renderQueue[videoId] = { status: 'done', videoUrl: result.publicUrl, videoId };
+    } else {
+      renderQueue[videoId] = { status: 'failed', error: result.error };
+    }
+    console.log('[Render] Done:', videoId, result.success ? '✅' : '❌');
+  });
+});
+
+const renderQueue = {};
+
+app.get("/api/render-status", (req, res) => {
+  const latest = Object.values(renderQueue).sort((a,b) => b.startedAt > a.startedAt ? 1 : -1)[0];
+  if(!latest) return res.json({ ready: false, status: 'no renders yet' });
+  res.json({ ready: latest.status === 'done', ...latest });
+});
+
+app.get("/api/render-status/:id", (req, res) => {
+  const job = renderQueue[req.params.id];
+  if(!job) return res.status(404).json({ error: 'Job not found' });
+  res.json({ ready: job.status === 'done', ...job });
 });
 
 // ─── Replicate Image Generation (Recraft v3) ─────────────────────────────────
