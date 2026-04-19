@@ -24,11 +24,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
-import { renderVideo } from "./src/renderer.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Lazy load renderer to avoid startup crash
+let renderVideo = null;
+async function getRenderVideo() {
+  if (!renderVideo) {
+    try {
+      const mod = await import("./src/renderer.js");
+      renderVideo = mod.renderVideo;
+    } catch(e) {
+      console.error("Remotion renderer not available:", e.message);
+      return null;
+    }
+  }
+  return renderVideo;
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const {
@@ -542,7 +556,9 @@ app.post("/api/video-from-plan", async (req, res) => {
   renderQueue[videoId].slides = slidesWithImages;
 
   try {
-    const result = await renderVideo({ slides: slidesWithImages, outputFilename: videoId });
+    const render = await getRenderVideo();
+    if(!render) { renderQueue[videoId] = { status: "failed", error: "Remotion not available" }; return; }
+    const result = await render({ slides: slidesWithImages, outputFilename: videoId });
     if (result.success) {
       renderQueue[videoId] = { status: "done", videoUrl: result.publicUrl, videoId, slides: slidesWithImages };
     } else {
