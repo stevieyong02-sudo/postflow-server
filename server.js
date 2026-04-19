@@ -41,6 +41,7 @@ const {
   CLAUDE_API_KEY    = "",
   REPLICATE_API_KEY = "",
   FAL_API_KEY       = "",
+  CLAUDE_API_KEY    = "",
 } = process.env;
 
 const FB_API         = "https://graph.facebook.com/v22.0";
@@ -404,6 +405,151 @@ app.post("/api/viral-coach", async (req, res) => {
     res.json({ success: true, analysis: JSON.parse(text.replace(/```json|```/g, "").trim()) });
   } catch (err) {
     res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── AI Video Creation Chat (like Blotato) ───────────────────────────────────
+const videoSessions = {}; // sessionId → { messages, plan }
+
+app.post("/api/video-chat", async (req, res) => {
+  const { message, sessionId } = req.body;
+  if (!CLAUDE_API_KEY) return res.status(400).json({ error: "CLAUDE_API_KEY not configured" });
+
+  const sid = sessionId || makeId("vs");
+  if (!videoSessions[sid]) videoSessions[sid] = { messages: [], plan: null };
+  const session = videoSessions[sid];
+
+  // Add user message
+  session.messages.push({ role: "user", content: message });
+
+  const systemPrompt = `You are PostFlow's AI Video Creator — an expert social media video strategist.
+
+When a user asks you to create a video, you:
+1. First ask 2-3 smart clarifying questions about platform, style, branding, CTA
+2. Once you have enough info (or user says "go for it"), produce a COMPLETE video plan
+
+When producing the plan, respond with ONLY this exact JSON format:
+{
+  "type": "plan",
+  "title": "Video title",
+  "ready": true,
+  "slides": [
+    {
+      "type": "hook",
+      "label": "small label text",
+      "title": "Main headline",
+      "subtitle": "subtitle text",
+      "imagePrompt": "detailed AI image generation prompt"
+    },
+    {
+      "type": "tip",
+      "number": "01",
+      "headline": "Tip headline",
+      "body": "Tip description",
+      "direction": "right",
+      "imagePrompt": "detailed AI image generation prompt"
+    },
+    {
+      "type": "cta",
+      "headline": "Closing headline",
+      "subtitle": "Tagline",
+      "cta": "Call to action text",
+      "imagePrompt": "detailed AI image generation prompt"
+    }
+  ]
+}
+
+When asking clarifying questions, respond conversationally (NOT JSON).
+Keep responses concise and professional.`;
+
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: session.messages
+      })
+    });
+    const data = await r.json();
+    const reply = data.content?.[0]?.text || "Sorry, I couldn't process that.";
+
+    // Add assistant reply to history
+    session.messages.push({ role: "assistant", content: reply });
+
+    // Check if it's a plan
+    let plan = null;
+    try {
+      const parsed = JSON.parse(reply);
+      if (parsed.type === "plan" && parsed.ready) {
+        plan = parsed;
+        session.plan = plan;
+      }
+    } catch {}
+
+    res.json({ success: true, sessionId: sid, reply, plan });
+  } catch(err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ─── Generate video from plan ─────────────────────────────────────────────────
+app.post("/api/video-from-plan", async (req, res) => {
+  const { sessionId, plan } = req.body;
+  if (!plan?.slides) return res.status(400).json({ error: "No plan provided" });
+
+  const videoId = makeId("vid");
+  renderQueue[videoId] = { status: "generating_images", startedAt: now() };
+  res.json({ success: true, videoId, status: "generating_images", message: "Generating AI images for each slide..." });
+
+  // Generate images for slides that have imagePrompt
+  const slidesWithImages = await Promise.all(plan.slides.map(async (slide) => {
+    if (!slide.imagePrompt || !REPLICATE_API_KEY) return slide;
+    try {
+      const startRes = await fetch("https://api.replicate.com/v1/models/recraft-ai/recraft-v3/predictions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}`, "Content-Type": "application/json", "Prefer": "wait" },
+        body: JSON.stringify({ input: { prompt: slide.imagePrompt, style: "realistic_image", width: 768, height: 1344, output_format: "webp" } }),
+      });
+      const startData = await startRes.json();
+      let output = startData.output;
+      let predId = startData.id;
+      let attempts = 0;
+      while (!output && attempts < 30) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, { headers: { "Authorization": `Bearer ${REPLICATE_API_KEY}` } });
+        const pollData = await poll.json();
+        if (pollData.status === "succeeded") output = pollData.output;
+        if (pollData.status === "failed") break;
+        attempts++;
+      }
+      const imageUrl = Array.isArray(output) ? output[0] : output;
+      return { ...slide, imageUrl };
+    } catch(e) {
+      console.error("Image gen failed:", e.message);
+      return slide;
+    }
+  }));
+
+  // Now render with Remotion
+  renderQueue[videoId].status = "rendering";
+  renderQueue[videoId].slides = slidesWithImages;
+
+  try {
+    const result = await renderVideo({ slides: slidesWithImages, outputFilename: videoId });
+    if (result.success) {
+      renderQueue[videoId] = { status: "done", videoUrl: result.publicUrl, videoId, slides: slidesWithImages };
+    } else {
+      renderQueue[videoId] = { status: "failed", error: result.error };
+    }
+  } catch(e) {
+    renderQueue[videoId] = { status: "failed", error: e.message };
   }
 });
 
