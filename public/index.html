@@ -447,41 +447,35 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 <div class="grid2">
 <div>
   <div class="card">
-    <div class="ch"><div class="chico" style="background:rgba(239,68,68,.1)">🎬</div><div><div class="cht">Generate Video</div><div class="chs">Recraft v3 images + Framepack animation</div></div></div>
+    <div class="ch"><div class="chico" style="background:rgba(108,71,255,.12)">🤖</div><div><div class="cht">AI Video Creator</div><div class="chs">Describe your video — AI plans and renders it</div></div></div>
     <div class="cb">
-      <div class="notice info">🎬 Same pipeline as Blotato — Recraft v3 for images, fal.ai Framepack for animation</div>
-      <div class="fg"><label class="flbl">Video topic / script</label><textarea id="vid-topic" rows="3" placeholder="e.g. 3 feng shui tips for wealth and abundance..."></textarea></div>
-      <div class="fg"><label class="flbl">Number of slides</label>
-        <select id="vid-slides"><option value="3">3 slides</option><option value="5" selected>5 slides</option><option value="7">7 slides</option></select>
+      <div id="vid-msgs" style="min-height:180px;max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding-right:4px"></div>
+      <div style="display:flex;gap:8px">
+        <textarea id="vid-inp" rows="2" placeholder="e.g. Make a feng shui wealth video..." style="flex:1;resize:none;padding:9px 12px;border-radius:var(--r);background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:inherit;font-size:13px;outline:none"></textarea>
+        <button onclick="sendVidMsg()" style="width:40px;height:40px;border-radius:var(--r);background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-end"><svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg></button>
       </div>
-      <div class="fg"><label class="flbl">Motion style</label>
-        <select id="vid-motion">
-          <option value="smooth cinematic pan, high quality">Cinematic pan</option>
-          <option value="slow zoom in, dreamy atmosphere">Slow zoom</option>
-          <option value="gentle floating motion, peaceful">Floating</option>
-          <option value="dynamic motion, energetic">Dynamic</option>
-        </select>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button onclick="vidQ('Make a feng shui wealth video')" style="padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit">Feng Shui Wealth</button>
+        <button onclick="vidQ('Create a morning routine video')" style="padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit">Morning Routine</button>
+        <button onclick="vidQ('Make a luxury real estate tips video')" style="padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit">Real Estate</button>
       </div>
-      <button class="db" id="vid-btn" onclick="generateVideo()">🎬 Generate Video</button>
-      <div id="vid-notice" style="margin-top:10px"></div>
     </div>
   </div>
 </div>
 <div>
   <div class="card">
-    <div class="ch"><div class="chico" style="background:rgba(34,197,94,.1)">▶️</div><div><div class="cht">Generated Video</div></div></div>
+    <div class="ch"><div class="chico" style="background:rgba(34,197,94,.1)">▶️</div><div><div class="cht">Generated Video</div><div class="chs" id="vid-status-txt">Waiting...</div></div></div>
     <div class="cb">
-      <div id="vid-prev" style="width:100%;aspect-ratio:9/16;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);margin-bottom:10px;overflow:hidden">Your video will appear here</div>
+      <div id="vid-prev" style="width:100%;aspect-ratio:9/16;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text3);margin-bottom:10px;overflow:hidden;max-height:480px"><div style="text-align:center;padding:20px"><div style="font-size:32px;margin-bottom:10px">🎬</div><div>Your video will appear here</div></div></div>
       <div id="vid-actions" style="display:none;flex-direction:column;gap:8px">
-        <button onclick="downloadVid()" style="width:100%;padding:9px;border-radius:7px;background:none;border:1px solid var(--border2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit">⬇️ Download Video</button>
-        <button onclick="postVideo()" class="db">📤 Post to Facebook</button>
+        <button onclick="downloadVid()" style="width:100%;padding:9px;border-radius:7px;background:none;border:1px solid var(--border2);color:var(--text2);font-size:12px;cursor:pointer;font-family:inherit">Download Video</button>
+        <button onclick="postVideo()" class="db">Post to Facebook</button>
       </div>
     </div>
   </div>
 </div>
 </div>
 </div>
-
 <!-- ACCOUNTS -->
 <div class="dsec" id="ds-accounts">
 <div class="grid2">
@@ -658,6 +652,7 @@ function ds(name,btn){
   const m=SMeta[name]||['PostFlow',''];
   document.getElementById('tb-t').textContent=m[0]; document.getElementById('tb-s').textContent=m[1];
   if(name==='calendar') loadCal();
+  if(name==='videos') initVidChat();
   if(name==='published') loadPosts('published');
   if(name==='failed') loadPosts('failed');
   if(name==='api') checkSrv();
@@ -911,6 +906,166 @@ async function postVideo(){
 ${d.publicUrl||''}`:`❌ ${d.error}`);
   }catch(e){ alert('Error: '+e.message); }
 }
+
+
+// ══════ AI VIDEO CHAT ══════
+var vidSessionId = null;
+var vidPollTimer = null;
+var currentVidUrl = null;
+
+function vidQ(t){
+  var el = document.getElementById('vid-inp');
+  if(el){ el.value = t; sendVidMsg(); }
+}
+
+function addVidMsg(role, text){
+  var msgs = document.getElementById('vid-msgs');
+  if(!msgs) return;
+  var wrap = document.createElement('div');
+  wrap.style.display = 'flex';
+  wrap.style.gap = '8px';
+  wrap.style.marginBottom = '10px';
+  if(role === 'user') wrap.style.flexDirection = 'row-reverse';
+  
+  var av = document.createElement('div');
+  av.style.cssText = 'width:26px;height:26px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;';
+  av.style.background = (role === 'user') ? 'var(--bg4)' : 'var(--accent)';
+  av.style.color = (role === 'user') ? 'var(--text2)' : '#fff';
+  av.textContent = (role === 'user') ? 'ME' : 'AI';
+  
+  var bub = document.createElement('div');
+  bub.style.cssText = 'max-width:85%;padding:9px 13px;border-radius:11px;font-size:12.5px;line-height:1.6;';
+  bub.style.background = (role === 'user') ? 'rgba(108,71,255,.16)' : 'var(--bg3)';
+  bub.style.border = '1px solid ' + ((role === 'user') ? 'rgba(108,71,255,.26)' : 'var(--border)');
+  bub.innerHTML = text.replace(/\n/g, '<br>');
+  
+  wrap.appendChild(av);
+  wrap.appendChild(bub);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function initVidChat(){
+  var msgs = document.getElementById('vid-msgs');
+  if(msgs && msgs.children.length === 0){
+    addVidMsg('ai', 'Hi! I am your AI Video Creator.\n\nTell me what video you want:\n- Feng shui wealth tips\n- Morning routine reel\n- Luxury real estate tips\n\nI will plan it, generate AI images, and render the full video!');
+  }
+}
+
+async function sendVidMsg(){
+  var inp = document.getElementById('vid-inp');
+  if(!inp) return;
+  var msg = inp.value.trim();
+  if(!msg) return;
+  inp.value = '';
+  addVidMsg('user', msg);
+  
+  var msgs = document.getElementById('vid-msgs');
+  var typDiv = document.createElement('div');
+  typDiv.id = 'vid-typ';
+  typDiv.style.cssText = 'display:flex;gap:8px;margin-bottom:10px';
+  typDiv.innerHTML = '<div style="width:26px;height:26px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">AI</div><div style="padding:9px 13px;border-radius:11px;background:var(--bg3);border:1px solid var(--border)"><div class="tdots"><span></span><span></span><span></span></div></div>';
+  msgs.appendChild(typDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  try {
+    var r = await fetch(SERVER + '/api/video-chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg, sessionId: vidSessionId})
+    });
+    var d = await r.json();
+    var t = document.getElementById('vid-typ');
+    if(t) t.remove();
+    
+    if(d.success){
+      vidSessionId = d.sessionId;
+      if(d.plan){
+        addVidMsg('ai', 'Perfect! I have a plan for "' + d.plan.title + '". Generating AI images now...');
+        startVidGen(d.plan);
+      } else {
+        addVidMsg('ai', d.reply);
+      }
+    } else {
+      addVidMsg('ai', 'Error: ' + (d.error || 'Unknown error'));
+    }
+  } catch(e) {
+    var t = document.getElementById('vid-typ');
+    if(t) t.remove();
+    addVidMsg('ai', 'Server error: ' + e.message);
+  }
+}
+
+async function startVidGen(plan){
+  var statusEl = document.getElementById('vid-status-txt');
+  var prevEl = document.getElementById('vid-prev');
+  if(statusEl) statusEl.textContent = 'Generating images...';
+  if(prevEl) prevEl.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px;text-align:center"><div class="spinner"></div><div style="font-size:12px;color:var(--text2)">Generating AI images...</div></div>';
+  
+  try {
+    var r = await fetch(SERVER + '/api/video-from-plan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sessionId: vidSessionId, plan: plan})
+    });
+    var d = await r.json();
+    
+    if(d.success){
+      if(statusEl) statusEl.textContent = 'Rendering video...';
+      if(prevEl) prevEl.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px;text-align:center"><div class="spinner"></div><div style="font-size:12px;color:var(--text2)">Rendering with Remotion...</div></div>';
+      
+      vidPollTimer = setInterval(async function(){
+        try {
+          var pr = await fetch(SERVER + '/api/render-status/' + d.videoId);
+          var ps = await pr.json();
+          if(ps.ready && ps.videoUrl){
+            clearInterval(vidPollTimer);
+            currentVidUrl = SERVER + ps.videoUrl;
+            if(prevEl) prevEl.innerHTML = '<video src="' + currentVidUrl + '" controls autoplay loop style="width:100%;height:100%;object-fit:cover;border-radius:var(--r)"></video>';
+            var actEl = document.getElementById('vid-actions');
+            if(actEl) actEl.style.display = 'flex';
+            if(statusEl) statusEl.textContent = 'Video ready!';
+            addVidMsg('ai', 'Your video is ready! Download it or post to Facebook.');
+          } else if(ps.status === 'failed'){
+            clearInterval(vidPollTimer);
+            if(statusEl) statusEl.textContent = 'Failed';
+            addVidMsg('ai', 'Video failed: ' + (ps.error || 'unknown error'));
+          }
+        } catch(e2) {}
+      }, 3000);
+    }
+  } catch(e) {
+    addVidMsg('ai', 'Error starting video: ' + e.message);
+  }
+}
+
+function downloadVid(){
+  if(!currentVidUrl) return;
+  var a = document.createElement('a');
+  a.href = currentVidUrl;
+  a.download = 'postflow-video.mp4';
+  a.click();
+}
+
+async function postVideo(){
+  if(!currentVidUrl){ alert('Generate a video first!'); return; }
+  var acc = accounts.find(function(a){ return a.platform === 'facebook'; });
+  if(!acc){ alert('Connect a Facebook account first!'); return; }
+  var caption = prompt('Enter caption for this video post:', 'Check this out! #PostFlow');
+  if(!caption) return;
+  try {
+    var r = await fetch(SERVER + '/api/post', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({accountId: acc.id, text: caption, mediaUrls: [currentVidUrl], platform: 'facebook', userId: userId, mediaType: 'reel'})
+    });
+    var d = await r.json();
+    alert(d.success ? 'Posted to ' + acc.name + '!' : 'Error: ' + d.error);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
 </script>
 </body>
 </html>
